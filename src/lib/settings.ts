@@ -24,6 +24,30 @@ function normalizeList(values: unknown, fallback: string[]): string[] {
   return normalized.length > 0 ? normalized : [...fallback];
 }
 
+function normalizeGridColumnsByArea(value: unknown): Record<string, string[]> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const normalized: Record<string, string[]> = {};
+
+  for (const [areaId, candidate] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof areaId !== "string" || areaId.trim().length === 0 || !Array.isArray(candidate)) {
+      continue;
+    }
+
+    const columns = candidate
+      .map((entry) => String(entry).trim())
+      .filter((entry) => entry.length > 0);
+
+    if (columns.length > 0) {
+      normalized[areaId] = Array.from(new Set(columns));
+    }
+  }
+
+  return normalized;
+}
+
 function normalizeArea(rawArea: Partial<AreaConfig>): AreaConfig | null {
   if (!rawArea.folderPath || !rawArea.name) {
     return null;
@@ -146,6 +170,7 @@ export function parseSettings(data: Partial<ProjectSettings> | undefined): Proje
     statuses: normalizeList(data?.statuses, DEFAULT_SETTINGS.statuses),
     priorities: normalizeList(data?.priorities, DEFAULT_SETTINGS.priorities),
     defaultProperties: normalizePropertyTemplateList(data?.defaultProperties, DEFAULT_SETTINGS.defaultProperties),
+    gridColumnsByArea: normalizeGridColumnsByArea(data?.gridColumnsByArea),
     enableTriStateCheckboxes: normalizeBoolean(data?.enableTriStateCheckboxes, DEFAULT_SETTINGS.enableTriStateCheckboxes),
     startupView: normalizeStartupView(data?.startupView),
     defaultProjectStatuses: normalizeList(data?.defaultProjectStatuses, DEFAULT_SETTINGS.defaultProjectStatuses),

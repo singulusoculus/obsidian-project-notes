@@ -65,6 +65,16 @@
         "defaultValue": ""
       }
     ],
+    "gridColumnsByArea": {
+      "area-1772741878315-uiunz0": [
+        "project",
+        "status",
+        "start-date",
+        "finish-date",
+        "due-date",
+        "requester"
+      ]
+    },
     "enableTriStateCheckboxes": true,
     "startupView": "project-notes-grid",
     "openTarget": "right-sidebar",
@@ -81,8 +91,8 @@
     "cacheReconcileMinutes": 10
   },
   "snapshot": {
-    "version": 3,
-    "generatedAt": 1772751191315,
+    "version": 4,
+    "generatedAt": 1772752540838,
     "projects": [
       {
         "path": "Test Area/Another Project.md",
@@ -100,6 +110,7 @@
         "tags": [],
         "parentProject": null,
         "requester": [],
+        "customProperties": {},
         "createdAt": 1772742547198,
         "updatedAt": 1772750506586,
         "tasks": [
@@ -163,6 +174,7 @@
         "tags": [],
         "parentProject": null,
         "requester": [],
+        "customProperties": {},
         "createdAt": 1772748698440,
         "updatedAt": 1772748698471,
         "tasks": []
@@ -170,10 +182,8 @@
       {
         "path": "Test Area/Test Project.md",
         "title": "Test Project",
-        "aliases": [
-          "Test Rename"
-        ],
-        "displayName": "Test Rename",
+        "aliases": [],
+        "displayName": "Test Project",
         "areaId": "area-1772741878315-uiunz0",
         "areaName": "Test",
         "status": "Awaiting Response",
@@ -185,22 +195,23 @@
         "tags": [],
         "parentProject": null,
         "requester": [],
+        "customProperties": {},
         "createdAt": 1772742226623,
-        "updatedAt": 1772751190497,
+        "updatedAt": 1772752540023,
         "tasks": [
           {
-            "id": "Test Area/Test Project.md:16",
+            "id": "Test Area/Test Project.md:15",
             "projectPath": "Test Area/Test Project.md",
-            "projectName": "Test Rename",
+            "projectName": "Test Project",
             "projectRequester": [],
-            "line": 16,
+            "line": 15,
             "text": "Another test task 🛫 2026-03-05",
-            "state": "in-progress",
+            "state": "unchecked",
             "checked": false,
             "startDate": "2026-03-05",
             "dueDate": null,
             "finishedDate": null,
-            "rawLine": "- [/] Another test task 🛫 2026-03-05"
+            "rawLine": "- [ ] Another test task 🛫 2026-03-05"
           }
         ]
       },
@@ -220,6 +231,7 @@
         "tags": [],
         "parentProject": null,
         "requester": [],
+        "customProperties": {},
         "createdAt": 1772746116481,
         "updatedAt": 1772750904472,
         "tasks": [
@@ -255,6 +267,7 @@
         "tags": [],
         "parentProject": null,
         "requester": [],
+        "customProperties": {},
         "createdAt": 1772748553354,
         "updatedAt": 1772748553374,
         "tasks": []

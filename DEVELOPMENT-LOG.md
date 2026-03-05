@@ -122,5 +122,23 @@ This document chronicles the implementation journey, key decisions, lessons lear
 - Simplified tri-state Live Preview CSS to remove redundant fallback selectors.
   - removed legacy `li[data-task]` and `.HyperMD-task-line[data-task]` paths
   - kept the decoration-based selector (`.opn-task-in-progress-line`) as the single Live Preview styling path
+- Added configurable Projects-grid columns with per-Area persistence.
+  - added a `Columns` multi-select dropdown in the Projects grid to show/hide columns
+  - added drag-and-drop reordering for visible columns directly inside the dropdown
+  - column choices now include configured custom properties from global defaults and Area overrides
+  - grid now renders columns dynamically and persists visible/order state per Area (`gridColumnsByArea`)
+  - project index now stores normalized custom-property display values for configured properties, enabling custom column rendering and project search
+- Combined column show/reorder controls into a single list.
+  - column picker now uses one draggable row list with visibility checkboxes on the far right of each row
+  - drag/reorder and show/hide now operate in the same control without separate sections
+- Fixed stretched checkbox styling in the Columns picker.
+  - narrowed the shared filter-row width rule to exclude `input[type="checkbox"]`
+  - visibility toggles now render as normal checkboxes instead of elongated bars
+- Updated column picker toggle behavior to preserve row order.
+  - unchecking/rechecking a column no longer moves that row within the picker list
+  - visibility now only affects grid rendering, while picker order remains stable until explicitly dragged
+- Reduced unnecessary grid refreshes on note edits.
+  - project index change detection now ignores volatile `createdAt`/`updatedAt` timestamps during equivalence checks
+  - editing note body content outside tasks/properties no longer triggers grid refresh churn
 
 ### Work done 2026.03.04

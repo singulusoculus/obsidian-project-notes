@@ -17,6 +17,25 @@ export type ViewVariant = "default";
 export type SortDirection = "asc" | "desc";
 export type ProjectPropertyType = "text" | "number" | "checkbox" | "date" | "datetime" | "multitext" | "tags" | "aliases";
 export type TaskState = "unchecked" | "in-progress" | "checked";
+export type ProjectGridBaseColumnId =
+  | "project"
+  | "status"
+  | "priority"
+  | "start-date"
+  | "finish-date"
+  | "due-date"
+  | "tags"
+  | "parent-project"
+  | "requester";
+
+export interface ProjectGridColumn {
+  id: string;
+  label: string;
+  kind: "base" | "property";
+  sortable: boolean;
+  sortField?: ProjectSortField;
+  propertyKey?: string;
+}
 
 export interface ProjectPropertyTemplate {
   name: string;
@@ -52,6 +71,7 @@ export interface ProjectSettings {
   statuses: string[];
   priorities: string[];
   defaultProperties: ProjectPropertyTemplate[];
+  gridColumnsByArea: Record<string, string[]>;
   enableTriStateCheckboxes: boolean;
   startupView: StartupView;
   openTarget: OpenTarget;
@@ -93,6 +113,7 @@ export interface ProjectNote {
   tags: string[];
   parentProject: string | null;
   requester: string[];
+  customProperties: Record<string, string>;
   createdAt: number;
   updatedAt: number;
   tasks: ProjectTask[];
@@ -136,6 +157,8 @@ export interface ProjectViewState {
   priorityFilter: string[];
   areaTagFilter: string[];
   availableAreaTags: string[];
+  availableProjectGridColumns: ProjectGridColumn[];
+  projectGridColumns: ProjectGridColumn[];
   sortBy: ProjectSortField;
   sortDirection: SortDirection;
   projects: ProjectNote[];

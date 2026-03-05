@@ -1,4 +1,4 @@
-import type { ProjectPropertyTemplate, ProjectPropertyType, ProjectSettings } from "./types";
+import type { ProjectGridColumn, ProjectPropertyTemplate, ProjectPropertyType, ProjectSettings } from "./types";
 
 export const DEFAULT_STATUSES = [
   "To Do",
@@ -48,11 +48,24 @@ export const DEFAULT_VALUE_TOKENS: Array<{ token: string; description: string }>
   { token: "{{file-title}}", description: "Project note filename (without .md)" },
 ];
 
+export const PROJECT_GRID_BASE_COLUMNS: ProjectGridColumn[] = [
+  { id: "project", label: "Project", kind: "base", sortable: true, sortField: "project" },
+  { id: "status", label: "Status", kind: "base", sortable: true, sortField: "status" },
+  { id: "priority", label: "Priority", kind: "base", sortable: true, sortField: "priority" },
+  { id: "start-date", label: "Start", kind: "base", sortable: true, sortField: "start-date" },
+  { id: "finish-date", label: "Finish", kind: "base", sortable: true, sortField: "finish-date" },
+  { id: "due-date", label: "Due", kind: "base", sortable: true, sortField: "due-date" },
+  { id: "tags", label: "Tags", kind: "base", sortable: true, sortField: "tags" },
+  { id: "parent-project", label: "Parent", kind: "base", sortable: true, sortField: "parent-project" },
+  { id: "requester", label: "Requester", kind: "base", sortable: true, sortField: "requester" },
+];
+
 export const DEFAULT_SETTINGS: ProjectSettings = {
   areas: [],
   statuses: DEFAULT_STATUSES,
   priorities: DEFAULT_PRIORITIES,
   defaultProperties: DEFAULT_PROJECT_PROPERTIES,
+  gridColumnsByArea: {},
   enableTriStateCheckboxes: true,
   startupView: "none",
   openTarget: "new-tab",
@@ -63,7 +76,7 @@ export const DEFAULT_SETTINGS: ProjectSettings = {
   cacheReconcileMinutes: 10,
 };
 
-export const SNAPSHOT_VERSION = 3;
+export const SNAPSHOT_VERSION = 4;
 
 export const TASK_START_EMOJI = "🛫";
 export const TASK_DUE_EMOJI = "📅";

@@ -93,7 +93,74 @@
   align-items: end;
 }
 
-.opn-grid-filter-row input,
+.opn-column-picker-wrap {
+  position: relative;
+}
+
+.opn-column-picker {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  min-width: 280px;
+  max-width: min(360px, 80vw);
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s);
+}
+
+.opn-column-picker section {
+  display: grid;
+  gap: 8px;
+}
+
+.opn-column-order-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.opn-column-order-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  cursor: grab;
+  user-select: none;
+}
+
+.opn-column-order-list li.dragging {
+  opacity: 0.5;
+}
+
+.opn-column-order-list li[draggable="false"] {
+  cursor: default;
+}
+
+.opn-column-drag-handle {
+  color: var(--text-muted);
+  min-width: 12px;
+}
+
+.opn-column-name {
+  flex: 1;
+}
+
+.opn-column-visibility-toggle {
+  margin-left: auto;
+}
+
+.opn-grid-filter-row input:not([type="checkbox"]),
 .opn-grid-filter-row select,
 .opn-board-header select,
 .opn-table select {

@@ -21,6 +21,7 @@ import {
   normalizeListOrStringValue,
   normalizeStringValue,
 } from "../utils/text";
+import { canonicalPropertyName, resolveAreaPropertyTemplates } from "../utils/properties";
 
 interface ReconcileOptions {
   normalize: boolean;
@@ -30,6 +31,18 @@ interface FileChangeOptions {
   normalize: boolean;
   syncTaskCompletionMarkers: boolean;
 }
+
+const RESERVED_PROJECT_PROPERTY_KEYS = new Set<string>([
+  "aliases",
+  "status",
+  "priority",
+  "start-date",
+  "finish-date",
+  "due-date",
+  "tags",
+  "parent-project",
+  "requester",
+]);
 
 export class ProjectIndexService {
   private readonly app: App;
@@ -202,6 +215,7 @@ export class ProjectIndexService {
           project.tags.join(" "),
           project.parentProject ?? "",
           project.requester.join(" "),
+          ...Object.values(project.customProperties ?? {}),
         ]
           .join(" ")
           .toLowerCase();
@@ -409,7 +423,7 @@ export class ProjectIndexService {
 
     const parsed = await this.parseProject(file, area);
     const existing = this.projectsByPath.get(file.path);
-    const changed = !existing || JSON.stringify(existing) !== JSON.stringify(parsed);
+    const changed = !existing || !this.projectsAreEquivalent(existing, parsed);
 
     if (!changed) {
       return false;
@@ -417,6 +431,21 @@ export class ProjectIndexService {
 
     this.projectsByPath.set(file.path, parsed);
     return true;
+  }
+
+  private projectsAreEquivalent(left: ProjectNote, right: ProjectNote): boolean {
+    const stableLeft = {
+      ...left,
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    const stableRight = {
+      ...right,
+      createdAt: 0,
+      updatedAt: 0,
+    };
+
+    return JSON.stringify(stableLeft) === JSON.stringify(stableRight);
   }
 
   private async parseProject(file: TFile, area: AreaConfig): Promise<ProjectNote> {
@@ -450,6 +479,7 @@ export class ProjectIndexService {
 
     const requester = normalizeArrayValue(frontmatter.requester);
     const parentProject = normalizeStringValue(frontmatter["parent-project"]);
+    const customProperties = this.extractCustomProperties(frontmatter, area);
 
     const startDate = normalizeStringValue(frontmatter["start-date"]);
     const finishDate = normalizeStringValue(frontmatter["finish-date"]);
@@ -473,10 +503,56 @@ export class ProjectIndexService {
       tags: Array.from(tagSet),
       parentProject,
       requester,
+      customProperties,
       createdAt: file.stat.ctime,
       updatedAt: file.stat.mtime,
       tasks,
     };
+  }
+
+  private extractCustomProperties(frontmatter: Record<string, unknown>, area: AreaConfig): Record<string, string> {
+    const frontmatterByCanonical = new Map<string, unknown>();
+    for (const [name, value] of Object.entries(frontmatter)) {
+      frontmatterByCanonical.set(canonicalPropertyName(name), value);
+    }
+
+    const customProperties: Record<string, string> = {};
+    const templates = resolveAreaPropertyTemplates(this.getSettings(), area);
+
+    for (const template of templates) {
+      const key = canonicalPropertyName(template.name);
+      if (RESERVED_PROJECT_PROPERTY_KEYS.has(key)) {
+        continue;
+      }
+
+      const rawValue = frontmatterByCanonical.get(key);
+      customProperties[key] = this.stringifyFrontmatterValue(rawValue);
+    }
+
+    return customProperties;
+  }
+
+  private stringifyFrontmatterValue(value: unknown): string {
+    if (value === null || value === undefined) {
+      return "";
+    }
+
+    if (Array.isArray(value)) {
+      return value
+        .map((entry) => String(entry).trim())
+        .filter((entry) => entry.length > 0)
+        .join(", ");
+    }
+
+    if (typeof value === "object") {
+      try {
+        return JSON.stringify(value);
+      } catch (_error) {
+        return "";
+      }
+    }
+
+    return String(value);
   }
 
   private resolveArea(path: string): AreaConfig | null {
