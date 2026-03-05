@@ -95,6 +95,11 @@
       value,
     });
   }
+
+  function handleProjectLinkClick(event: MouseEvent, path: string): void {
+    event.preventDefault();
+    void viewStore.openProject(path);
+  }
 </script>
 
 <div class={`opn-kanban opn-${variant}`}>
@@ -121,21 +126,6 @@
     </div>
 
     <div class="opn-filter-groups">
-      <div class="opn-filter-group" aria-label="Status filters">
-        <span>Status</span>
-        <button type="button" class="secondary" onclick={() => viewStore.clearStatusFilter()}>Clear</button>
-        {#each statusOptions as status (status)}
-          <label>
-            <input
-              type="checkbox"
-              checked={state.statusFilter.includes(status)}
-              onchange={() => viewStore.toggleStatusFilter(status)}
-            />
-            {status}
-          </label>
-        {/each}
-      </div>
-
       {#if state.availableAreaTags.length > 0}
         <div class="opn-filter-group" aria-label="Area tag filters">
           <span>Area Tags</span>
@@ -177,14 +167,14 @@
                 ondragstart={(event) => handleDragStart(event, project.path)}
                 ondragend={handleDragEnd}
               >
-                <button
-                  type="button"
-                  class="link"
-                  aria-label={`Open project note ${project.customName}`}
-                  onclick={() => void viewStore.openProject(project.path)}
+                <a
+                  href={encodeURI(project.path)}
+                  class="opn-link"
+                  aria-label={`Open project note ${project.displayName}`}
+                  onclick={(event) => handleProjectLinkClick(event, project.path)}
                 >
-                  {project.customName}
-                </button>
+                  {project.displayName}
+                </a>
 
                 <div class="opn-card-meta">
                   <span>Due: {project.dueDate ?? ""}</span>

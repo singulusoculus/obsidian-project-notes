@@ -1,5 +1,10 @@
 import { DEFAULT_SETTINGS } from "./constants";
 import type { AreaConfig, PluginPersistedData, ProjectSettings } from "./types";
+import {
+  isLockedPropertyName,
+  normalizeDisabledPropertyNames,
+  normalizePropertyTemplateList,
+} from "./utils/properties";
 import { slugifyAreaName } from "./utils/text";
 
 function uniqueId(prefix: string): string {
@@ -52,7 +57,72 @@ function normalizeArea(rawArea: Partial<AreaConfig>): AreaConfig | null {
     normalized.priorityOverrides = normalizeList(rawArea.priorityOverrides, []);
   }
 
+  if (rawArea.propertyOverrides && rawArea.propertyOverrides.length > 0) {
+    normalized.propertyOverrides = normalizePropertyTemplateList(rawArea.propertyOverrides, []).filter(
+      (property) => !isLockedPropertyName(property.name),
+    );
+  }
+
+  normalized.disabledPropertyNames = normalizeDisabledPropertyNames(rawArea.disabledPropertyNames);
+
   return normalized;
+}
+
+function normalizeSortBy(value: unknown): ProjectSettings["defaultSortBy"] {
+  if (
+    value === "project" ||
+    value === "status" ||
+    value === "priority" ||
+    value === "start-date" ||
+    value === "finish-date" ||
+    value === "due-date" ||
+    value === "tags" ||
+    value === "parent-project" ||
+    value === "requester"
+  ) {
+    return value;
+  }
+
+  if (value === "custom-name") {
+    return "project";
+  }
+
+  return DEFAULT_SETTINGS.defaultSortBy;
+}
+
+function normalizeSortDirection(value: unknown): ProjectSettings["defaultSortDirection"] {
+  return value === "desc" ? "desc" : "asc";
+}
+
+function normalizeBoolean(value: unknown, fallback: boolean): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  return fallback;
+}
+
+function normalizeStartupView(value: unknown): ProjectSettings["startupView"] {
+  if (value === "none") {
+    return "none";
+  }
+
+  if (
+    value === "project-notes-grid" ||
+    value === "project-notes-kanban"
+  ) {
+    return value;
+  }
+
+  if (value === "project-notes-grid-custom" || value === "project-notes-grid-bases") {
+    return "project-notes-grid";
+  }
+
+  if (value === "project-notes-kanban-custom" || value === "project-notes-kanban-bases") {
+    return "project-notes-kanban";
+  }
+
+  return DEFAULT_SETTINGS.startupView;
 }
 
 export function makeNewArea(): AreaConfig {
@@ -63,6 +133,8 @@ export function makeNewArea(): AreaConfig {
     slug: "",
     folderPath: "",
     includeMode: "recursive",
+    propertyOverrides: [],
+    disabledPropertyNames: [],
   };
 }
 
@@ -73,7 +145,12 @@ export function parseSettings(data: Partial<ProjectSettings> | undefined): Proje
     areas: [],
     statuses: normalizeList(data?.statuses, DEFAULT_SETTINGS.statuses),
     priorities: normalizeList(data?.priorities, DEFAULT_SETTINGS.priorities),
+    defaultProperties: normalizePropertyTemplateList(data?.defaultProperties, DEFAULT_SETTINGS.defaultProperties),
+    enableTriStateCheckboxes: normalizeBoolean(data?.enableTriStateCheckboxes, DEFAULT_SETTINGS.enableTriStateCheckboxes),
+    startupView: normalizeStartupView(data?.startupView),
     defaultProjectStatuses: normalizeList(data?.defaultProjectStatuses, DEFAULT_SETTINGS.defaultProjectStatuses),
+    defaultSortBy: normalizeSortBy(data?.defaultSortBy),
+    defaultSortDirection: normalizeSortDirection(data?.defaultSortDirection),
     kanbanHiddenStatuses: normalizeList(data?.kanbanHiddenStatuses, DEFAULT_SETTINGS.kanbanHiddenStatuses),
   };
 

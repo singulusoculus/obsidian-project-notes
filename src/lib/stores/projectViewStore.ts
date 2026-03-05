@@ -4,6 +4,7 @@ import type {
   ProjectMetadataUpdate,
   ProjectSettings,
   ProjectSortField,
+  TaskState,
   ProjectViewState,
   SortDirection,
   ViewVariant,
@@ -60,6 +61,8 @@ export class ProjectViewStore {
       sortDirection: settings.defaultSortDirection,
       projects: [],
       tasks: [],
+      showCompletedTasksInTaskView: false,
+      triStateCheckboxes: settings.enableTriStateCheckboxes,
       hiddenKanbanStatuses: settings.kanbanHiddenStatuses,
       showHiddenKanban: false,
     });
@@ -103,7 +106,10 @@ export class ProjectViewStore {
       const projects = this.indexService.queryProjects({
         areaId: currentAreaId,
         search: current.projectSearch,
-        statuses: statusFilter.length > 0 ? statusFilter : undefined,
+        statuses:
+          current.boardType === "grid" && statusFilter.length > 0
+            ? statusFilter
+            : undefined,
         priorities: priorityFilter.length > 0 ? priorityFilter : undefined,
         areaTags: areaTagFilter.length > 0 ? areaTagFilter : undefined,
         sortBy: current.sortBy,
@@ -113,7 +119,7 @@ export class ProjectViewStore {
       const tasks = this.indexService.queryTasks({
         areaId: currentAreaId,
         search: current.taskSearch,
-        includeCompleted: false,
+        includeCompleted: current.showCompletedTasksInTaskView,
         sortBy: "due-date",
         sortDirection: "asc",
       });
@@ -129,6 +135,7 @@ export class ProjectViewStore {
         areaTagFilter,
         availableAreaTags,
         hiddenKanbanStatuses: settings.kanbanHiddenStatuses,
+        triStateCheckboxes: settings.enableTriStateCheckboxes,
         projects,
         tasks,
       };
@@ -151,6 +158,14 @@ export class ProjectViewStore {
 
   setTaskSearch(search: string): void {
     this.state.update((current) => ({ ...current, taskSearch: search }));
+    this.refresh();
+  }
+
+  toggleTaskViewCompletedVisibility(): void {
+    this.state.update((current) => ({
+      ...current,
+      showCompletedTasksInTaskView: !current.showCompletedTasksInTaskView,
+    }));
     this.refresh();
   }
 
@@ -246,8 +261,8 @@ export class ProjectViewStore {
     await this.createTask(areaId);
   }
 
-  async toggleTask(taskId: string, checked: boolean): Promise<void> {
-    await this.indexService.toggleTask({ taskId, checked });
+  async setTaskState(taskId: string, state: TaskState): Promise<void> {
+    await this.indexService.toggleTask({ taskId, state });
   }
 
   private resolveInitialAreaId(areaId: string | null | undefined, settings: ProjectSettings): string | null {

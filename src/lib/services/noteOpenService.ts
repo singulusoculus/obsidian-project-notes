@@ -40,17 +40,21 @@ export class NoteOpenService {
     }
 
     const existingLeaf = this.managedLeaves.get(target);
-    if (existingLeaf) {
+    if (existingLeaf && this.isLeafAttached(existingLeaf)) {
       return existingLeaf;
     }
+    this.managedLeaves.delete(target);
 
     const activeLeaf = this.app.workspace.getMostRecentLeaf() ?? this.app.workspace.getLeaf();
     let leaf: WorkspaceLeaf;
 
     if (target === "left-sidebar") {
-      leaf = this.app.workspace.getLeftLeaf(false) ?? this.app.workspace.getLeaf("split");
+      leaf = this.app.workspace.getLeftLeaf(false) ?? this.app.workspace.getLeftLeaf(true) ?? this.app.workspace.getLeaf("split");
     } else if (target === "right-sidebar") {
-      leaf = this.app.workspace.getRightLeaf(false) ?? this.app.workspace.getLeaf("split");
+      leaf =
+        this.app.workspace.getRightLeaf(false) ??
+        this.app.workspace.getRightLeaf(true) ??
+        this.app.workspace.getLeaf("split");
     } else if (target === "left-split") {
       leaf =
         this.app.workspace.createLeafBySplit?.(activeLeaf, "vertical", true) ??
@@ -67,5 +71,16 @@ export class NoteOpenService {
 
     this.managedLeaves.set(target, leaf);
     return leaf;
+  }
+
+  private isLeafAttached(leaf: WorkspaceLeaf): boolean {
+    let found = false;
+    this.app.workspace.iterateAllLeaves((candidate) => {
+      if (candidate === leaf) {
+        found = true;
+      }
+    });
+
+    return found;
   }
 }

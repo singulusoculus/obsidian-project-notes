@@ -53,5 +53,71 @@ This document chronicles the implementation journey, key decisions, lessons lear
   - unchecking removes `✅ YYYY-MM-DD`
   - integrated into file-change handling with in-flight guards to avoid modify-event loops
   - project parsing now reads from disk for immediate consistency after auto-amend writes
+  - hardened task matching to support more checkbox line formats and tolerant `## Tasks` heading variants
+  - added editor-change reconciliation path so direct note checkbox toggles are amended in the live editor buffer
+- Updated Projects grid to hide row expand/collapse control for projects with no tasks.
+  - task detail row now only renders when a project has at least one task
+- Added show/hide completed toggle to the Tasks tab view.
+  - tasks query now supports incomplete-only or include-completed modes from view state
+  - default remains incomplete-only; users can toggle visibility inline
+- Fixed task-name typing issue in note editor when entering spaces.
+  - editor reconciliation now leaves unchecked task text untouched unless a completed-date marker exists
+  - prevents cursor jumps/newline side effects when typing task names in project notes
+- Added Project requester display to the Tasks grid.
+  - task model now carries project requester values
+  - Tasks grid includes a `Requester` column and task search now indexes requester text
+- Fixed sidebar open-target leaf reuse when user closes the sidebar pane.
+  - note-open service now validates cached managed leaves are still attached before reuse
+  - sidebar targets recreate side leaves when missing, instead of silently reusing stale leaf refs
+- Updated project-note openers in Grid/Kanban to render as standard links instead of buttons.
+  - replaced button-based open controls with anchor links
+  - added dedicated link styling class for normal link presentation
+- Added startup view setting with default `None`.
+  - users can choose a Project Notes view to auto-open on Obsidian startup
+  - startup preference is parsed/validated in settings and opens on layout-ready load
+- Removed Bases as a user-facing view variant and renamed remaining views to generic names.
+  - primary registered views/commands are now `Project Notes Grid` and `Project Notes Kanban`
+  - startup view setting now targets the two generic view IDs
+  - added legacy view-id/startup-value mapping for backward compatibility with existing workspaces
+- Removed `created-at` and `updated-at` from project frontmatter normalization and view UI.
+  - new/normalized project notes no longer auto-insert those frontmatter fields
+  - Grid project columns and sort dropdowns no longer expose Created/Updated fields
+- Removed status-filter controls from Kanban view.
+  - Kanban now ignores status-filter state and always queries across statuses
+  - Done/Cancelled visibility remains controlled by Kanban hidden-status settings/drop zones
+- Updated Projects grid sorting UX to use clickable column headers instead of separate sort controls.
+  - removed `Sort by` and `Direction` dropdowns from grid controls
+  - clicking a sortable header now sets sort field and toggles asc/desc with inline arrow indicator
+- Added configurable property templates and Area-level property overrides.
+  - new global default-properties settings let users define property `name`, `type`, and `default value`
+  - per-Area settings now support override/additional properties and disabling selected global properties
+  - locked core properties (`status`, `priority`, `start-date`, `finish-date`, `due-date`) cannot be edited/removed
+  - added dynamic default tokens (`{{today}}`, `{{tomorrow}}`, `{{yesterday}}`, `{{now}}`, `{{area-name}}`, `{{area-slug}}`, `{{file-title}}`)
+  - added `Backfill Missing Project Properties` command to add missing configured properties across existing project notes
+- Replaced `custom-name` with Obsidian `aliases`.
+  - project model now uses `displayName` (`aliases[0]` fallback to note title)
+  - Grid and Kanban link labels now show alias when present, otherwise note title
+  - removed `Custom Name` column/sort option and migrated legacy `custom-name` sort setting to `project`
+- Updated vault property type syncing to derive from configured project properties (global + Area overrides) instead of hardcoded keys.
+- Updated locked-property behavior in property template settings.
+  - locked properties now allow editing `default value` while keeping `name` and `type` fixed
+  - remove/delete control is now hidden for locked properties instead of shown disabled
+- Added optional tri-state task checkbox behavior across note editor and Grid task interactions.
+  - new setting toggles checkbox cycle: `[ ]` -> `[/]` -> `[x]` -> `[ ]`
+  - task parser/index now persist tri-state (`unchecked`, `in-progress`, `checked`) and still treat only checked as completed
+  - editor-change reconciliation now applies tri-state transitions from note clicks and syncs markers consistently
+  - when a task enters `in-progress` and has no `🛫` marker, plugin auto-adds `🛫 <today>`
+  - improved note-editor state seeding on active file/open to avoid first-click transition misses due stale/late previous-content snapshots
+- Fixed tri-state checkbox visual feedback in grid rows.
+  - checkbox click handler now applies visual state (`checked`/`indeterminate`) immediately based on computed next state before async cache/index refresh completes
+  - prevents unchecked -> in-progress clicks from appearing as fully checked in the UI while markdown is already `[/]`
+- Added explicit tri-state visual styling for in-progress checkboxes.
+  - grid task checkboxes now carry `data-task-state` and `aria-checked` values from task state
+  - in-progress checkboxes render with a custom half-fill bar even when theme/browser does not draw native `indeterminate`
+  - added note task styling for list items with `data-task="/"` so `[/]` presents as in-progress instead of a normal checked box
+- Added a CodeMirror line-decoration extension for Live Preview in-progress tasks.
+  - editor extension marks visible `[/]` task lines with `opn-task-in-progress-line`
+  - Live Preview styling now targets that class directly so rendering does not depend on Obsidian internal `data-task` attributes
+  - switched half-fill indicator to background-layer rendering instead of pseudo-elements on `input` for reliable cross-engine display
 
 ### Work done 2026.03.04

@@ -4,11 +4,10 @@
     ProjectNote,
     ProjectSortField,
     ProjectTask,
-    SortDirection,
+    TaskState,
     ViewVariant,
   } from "../lib/types";
   import type { ProjectViewStore } from "../lib/stores/projectViewStore";
-  import { formatTimestamp } from "../lib/utils/text";
 
   let { viewStore, variant } = $props<{ viewStore: ProjectViewStore; variant: ViewVariant }>();
 
@@ -16,13 +15,6 @@
 
   let expandedProjects = $state<Record<string, boolean>>({});
   let showCompletedTasks = $state<Record<string, boolean>>({});
-  let sortField = $state<ProjectSortField>("due-date");
-  let sortDirection = $state<SortDirection>("asc");
-
-  $effect(() => {
-    sortField = state.sortBy;
-    sortDirection = state.sortDirection;
-  });
 
   const statusOptions = $derived.by(() => {
     const values = new Set(state.statuses);
@@ -68,8 +60,77 @@
     return showCompletedTasks[path] ?? false;
   }
 
-  function handleSortChange(): void {
-    viewStore.setSort(sortField, sortDirection);
+  function sortByColumn(field: ProjectSortField): void {
+    const nextDirection = state.sortBy === field && state.sortDirection === "asc" ? "desc" : "asc";
+    viewStore.setSort(field, nextDirection);
+  }
+
+  function sortMarker(field: ProjectSortField): string {
+    if (state.sortBy !== field) {
+      return "";
+    }
+    return state.sortDirection === "asc" ? "↑" : "↓";
+  }
+
+  function headerSortState(field: ProjectSortField): "ascending" | "descending" | "none" {
+    if (state.sortBy !== field) {
+      return "none";
+    }
+    return state.sortDirection === "asc" ? "ascending" : "descending";
+  }
+
+  function checkboxVisualState(node: HTMLInputElement, taskState: TaskState): { update: (nextState: TaskState) => void } {
+    applyCheckboxVisual(node, taskState);
+
+    return {
+      update(nextState: TaskState): void {
+        applyCheckboxVisual(node, nextState);
+      },
+    };
+  }
+
+  function nextTaskState(task: ProjectTask): TaskState {
+    if (!state.triStateCheckboxes) {
+      return task.state === "checked" ? "unchecked" : "checked";
+    }
+
+    if (task.state === "unchecked") {
+      return "in-progress";
+    }
+
+    if (task.state === "in-progress") {
+      return "checked";
+    }
+
+    return "unchecked";
+  }
+
+  function applyCheckboxVisual(node: HTMLInputElement, taskState: TaskState): void {
+    node.dataset.taskState = taskState;
+    node.checked = taskState === "checked";
+    node.indeterminate = taskState === "in-progress";
+    if (taskState === "in-progress") {
+      node.setAttribute("aria-checked", "mixed");
+    } else {
+      node.setAttribute("aria-checked", taskState === "checked" ? "true" : "false");
+    }
+  }
+
+  function handleTaskCheckboxClick(event: MouseEvent, task: ProjectTask): void {
+    event.preventDefault();
+    const nextState = nextTaskState(task);
+    const target = event.currentTarget;
+    if (target instanceof HTMLInputElement) {
+      applyCheckboxVisual(target, nextState);
+    }
+    void viewStore.setTaskState(task.id, nextState);
+  }
+
+  function handleSortHeaderKeydown(event: KeyboardEvent, field: ProjectSortField): void {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      sortByColumn(field);
+    }
   }
 
   function handleStatusChange(project: ProjectNote, event: Event): void {
@@ -88,6 +149,11 @@
       key: "priority",
       value,
     });
+  }
+
+  function handleProjectLinkClick(event: MouseEvent, path: string): void {
+    event.preventDefault();
+    void viewStore.openProject(path);
   }
 
   const TASK_DATE_TOKEN_REGEX = /(?:🛫|📅|✅)\s*\d{4}-\d{2}-\d{2}/gu;
@@ -131,32 +197,6 @@
             value={state.projectSearch}
             oninput={(event) => viewStore.setProjectSearch((event.currentTarget as HTMLInputElement).value)}
           />
-        </label>
-
-        <label>
-          Sort by
-          <select bind:value={sortField} onchange={handleSortChange}>
-            <option value="project">Project</option>
-            <option value="custom-name">Custom Name</option>
-            <option value="status">Status</option>
-            <option value="priority">Priority</option>
-            <option value="start-date">Start Date</option>
-            <option value="finish-date">Finish Date</option>
-            <option value="due-date">Due Date</option>
-            <option value="tags">Tags</option>
-            <option value="parent-project">Parent Project</option>
-            <option value="requester">Requester</option>
-            <option value="created-at">Created At</option>
-            <option value="updated-at">Updated At</option>
-          </select>
-        </label>
-
-        <label>
-          Direction
-          <select bind:value={sortDirection} onchange={handleSortChange}>
-            <option value="asc">Ascending</option>
-            <option value="desc">Descending</option>
-          </select>
         </label>
       </div>
 
@@ -229,6 +269,14 @@
         <button type="button" class="mod-cta" onclick={() => void viewStore.createTaskInCurrentArea()}>
           Add Task
         </button>
+
+        <button
+          type="button"
+          class="secondary"
+          onclick={() => viewStore.toggleTaskViewCompletedVisibility()}
+        >
+          {state.showCompletedTasksInTaskView ? "Hide completed" : "Show completed"}
+        </button>
       </div>
     {/if}
   </section>
@@ -238,44 +286,141 @@
       <thead>
         <tr>
           <th></th>
-          <th>Project</th>
-          <th>Custom Name</th>
-          <th>Status</th>
-          <th>Priority</th>
-          <th>Start</th>
-          <th>Finish</th>
-          <th>Due</th>
-          <th>Tags</th>
-          <th>Parent</th>
-          <th>Requester</th>
-          <th>Created</th>
-          <th>Updated</th>
+          <th aria-sort={headerSortState("project")}>
+            <span
+              class="opn-sort-header"
+              role="button"
+              tabindex="0"
+              onclick={() => sortByColumn("project")}
+              onkeydown={(event) => handleSortHeaderKeydown(event, "project")}
+            >
+              <span>Project</span>
+              <span class="opn-sort-marker">{sortMarker("project")}</span>
+            </span>
+          </th>
+          <th aria-sort={headerSortState("status")}>
+            <span
+              class="opn-sort-header"
+              role="button"
+              tabindex="0"
+              onclick={() => sortByColumn("status")}
+              onkeydown={(event) => handleSortHeaderKeydown(event, "status")}
+            >
+              <span>Status</span>
+              <span class="opn-sort-marker">{sortMarker("status")}</span>
+            </span>
+          </th>
+          <th aria-sort={headerSortState("priority")}>
+            <span
+              class="opn-sort-header"
+              role="button"
+              tabindex="0"
+              onclick={() => sortByColumn("priority")}
+              onkeydown={(event) => handleSortHeaderKeydown(event, "priority")}
+            >
+              <span>Priority</span>
+              <span class="opn-sort-marker">{sortMarker("priority")}</span>
+            </span>
+          </th>
+          <th aria-sort={headerSortState("start-date")}>
+            <span
+              class="opn-sort-header"
+              role="button"
+              tabindex="0"
+              onclick={() => sortByColumn("start-date")}
+              onkeydown={(event) => handleSortHeaderKeydown(event, "start-date")}
+            >
+              <span>Start</span>
+              <span class="opn-sort-marker">{sortMarker("start-date")}</span>
+            </span>
+          </th>
+          <th aria-sort={headerSortState("finish-date")}>
+            <span
+              class="opn-sort-header"
+              role="button"
+              tabindex="0"
+              onclick={() => sortByColumn("finish-date")}
+              onkeydown={(event) => handleSortHeaderKeydown(event, "finish-date")}
+            >
+              <span>Finish</span>
+              <span class="opn-sort-marker">{sortMarker("finish-date")}</span>
+            </span>
+          </th>
+          <th aria-sort={headerSortState("due-date")}>
+            <span
+              class="opn-sort-header"
+              role="button"
+              tabindex="0"
+              onclick={() => sortByColumn("due-date")}
+              onkeydown={(event) => handleSortHeaderKeydown(event, "due-date")}
+            >
+              <span>Due</span>
+              <span class="opn-sort-marker">{sortMarker("due-date")}</span>
+            </span>
+          </th>
+          <th aria-sort={headerSortState("tags")}>
+            <span
+              class="opn-sort-header"
+              role="button"
+              tabindex="0"
+              onclick={() => sortByColumn("tags")}
+              onkeydown={(event) => handleSortHeaderKeydown(event, "tags")}
+            >
+              <span>Tags</span>
+              <span class="opn-sort-marker">{sortMarker("tags")}</span>
+            </span>
+          </th>
+          <th aria-sort={headerSortState("parent-project")}>
+            <span
+              class="opn-sort-header"
+              role="button"
+              tabindex="0"
+              onclick={() => sortByColumn("parent-project")}
+              onkeydown={(event) => handleSortHeaderKeydown(event, "parent-project")}
+            >
+              <span>Parent</span>
+              <span class="opn-sort-marker">{sortMarker("parent-project")}</span>
+            </span>
+          </th>
+          <th aria-sort={headerSortState("requester")}>
+            <span
+              class="opn-sort-header"
+              role="button"
+              tabindex="0"
+              onclick={() => sortByColumn("requester")}
+              onkeydown={(event) => handleSortHeaderKeydown(event, "requester")}
+            >
+              <span>Requester</span>
+              <span class="opn-sort-marker">{sortMarker("requester")}</span>
+            </span>
+          </th>
         </tr>
       </thead>
       <tbody>
         {#each state.projects as project (project.path)}
           <tr>
             <td>
-              <button
-                type="button"
-                class="secondary"
-                aria-label={`Toggle tasks for ${project.customName}`}
-                onclick={() => toggleExpand(project.path)}
-              >
-                {expandedProjects[project.path] ? "▾" : "▸"}
-              </button>
+              {#if project.tasks.length > 0}
+                <button
+                  type="button"
+                  class="secondary"
+                  aria-label={`Toggle tasks for ${project.displayName}`}
+                  onclick={() => toggleExpand(project.path)}
+                >
+                  {expandedProjects[project.path] ? "▾" : "▸"}
+                </button>
+              {/if}
             </td>
             <td>
-              <button
-                type="button"
-                class="link"
-                aria-label={`Open project note ${project.customName}`}
-                onclick={() => void viewStore.openProject(project.path)}
+              <a
+                href={encodeURI(project.path)}
+                class="opn-link"
+                aria-label={`Open project note ${project.displayName}`}
+                onclick={(event) => handleProjectLinkClick(event, project.path)}
               >
-                {project.title}
-              </button>
+                {project.displayName}
+              </a>
             </td>
-            <td>{project.customName}</td>
             <td>
               <select value={project.status} onchange={(event) => handleStatusChange(project, event)}>
                 {#each statusOptions as status (status)}
@@ -296,20 +441,18 @@
             <td>{project.tags.join(", ")}</td>
             <td>{project.parentProject ?? ""}</td>
             <td>{project.requester.join(", ")}</td>
-            <td>{formatTimestamp(project.createdAt)}</td>
-            <td>{formatTimestamp(project.updatedAt)}</td>
           </tr>
 
-          {#if expandedProjects[project.path]}
+          {#if project.tasks.length > 0 && expandedProjects[project.path]}
             <tr class="opn-row-detail">
-              <td colspan="13">
+              <td colspan="10">
                 <div class="opn-task-detail-header">
                   <strong>Tasks</strong>
                   <button
                     type="button"
                     class="secondary"
                     onclick={() => toggleCompleted(project.path)}
-                    aria-label={`Toggle completed tasks for ${project.customName}`}
+                    aria-label={`Toggle completed tasks for ${project.displayName}`}
                   >
                     {showCompletedTasks[project.path] ? "Hide completed" : "Show completed"}
                   </button>
@@ -319,14 +462,15 @@
                   {#each sortedTasksByProject.get(project.path) ?? [] as task (task.id)}
                     {#if shouldShowTask(project.path, task)}
                       <li>
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={task.checked}
-                            onchange={(event) => void viewStore.toggleTask(task.id, (event.currentTarget as HTMLInputElement).checked)}
-                          />
-                          <span>{task.text}</span>
-                        </label>
+                        <input
+                          type="checkbox"
+                          class="opn-task-checkbox"
+                          aria-label={`Toggle task ${getTaskDisplayText(task)}`}
+                          checked={task.state === "checked"}
+                          use:checkboxVisualState={task.state}
+                          onclick={(event) => handleTaskCheckboxClick(event, task)}
+                        />
+                        <span>{task.text}</span>
                       </li>
                     {/if}
                   {/each}
@@ -344,6 +488,7 @@
           <th>Done</th>
           <th>Task</th>
           <th>Project</th>
+          <th>Requester</th>
           <th>Start</th>
           <th>Due</th>
         </tr>
@@ -355,21 +500,24 @@
               <input
                 aria-label={`Toggle task ${getTaskDisplayText(task)}`}
                 type="checkbox"
-                checked={task.checked}
-                onchange={(event) => void viewStore.toggleTask(task.id, (event.currentTarget as HTMLInputElement).checked)}
+                class="opn-task-checkbox"
+                checked={task.state === "checked"}
+                use:checkboxVisualState={task.state}
+                onclick={(event) => handleTaskCheckboxClick(event, task)}
               />
             </td>
             <td>{getTaskDisplayText(task)}</td>
             <td>
-              <button
-                type="button"
-                class="link"
+              <a
+                href={encodeURI(task.projectPath)}
+                class="opn-link"
                 aria-label={`Open project note ${task.projectName}`}
-                onclick={() => void viewStore.openProject(task.projectPath)}
+                onclick={(event) => handleProjectLinkClick(event, task.projectPath)}
               >
                 {task.projectName}
-              </button>
+              </a>
             </td>
+            <td>{(task.projectRequester ?? []).join(", ")}</td>
             <td>{task.startDate ?? ""}</td>
             <td>{task.dueDate ?? ""}</td>
           </tr>

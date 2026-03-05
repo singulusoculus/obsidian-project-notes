@@ -16,7 +16,6 @@ import { ProjectNormalizer } from "./projectNormalizer";
 import { TaskParser } from "./taskParser";
 import { resolveAreaForPath } from "../utils/areas";
 import {
-  formatTimestamp,
   isIsoDate,
   normalizeArrayValue,
   normalizeListOrStringValue,
@@ -193,7 +192,8 @@ export class ProjectIndexService {
       if (search.length > 0) {
         const searchable = [
           project.title,
-          project.customName,
+          project.displayName,
+          project.aliases.join(" "),
           project.status,
           project.priority,
           project.startDate ?? "",
@@ -202,8 +202,6 @@ export class ProjectIndexService {
           project.tags.join(" "),
           project.parentProject ?? "",
           project.requester.join(" "),
-          formatTimestamp(project.createdAt),
-          formatTimestamp(project.updatedAt),
         ]
           .join(" ")
           .toLowerCase();
@@ -230,7 +228,7 @@ export class ProjectIndexService {
     let tasks = this.queryProjects({ areaId: spec.areaId }).flatMap((project) => project.tasks);
 
     if (!includeCompleted) {
-      tasks = tasks.filter((task) => !task.checked);
+      tasks = tasks.filter((task) => task.state !== "checked");
     }
 
     if (search.length > 0) {
@@ -238,6 +236,7 @@ export class ProjectIndexService {
         const searchable = [
           task.text,
           task.projectName,
+          (task.projectRequester ?? []).join(" "),
           task.startDate ?? "",
           task.dueDate ?? "",
           task.finishedDate ?? "",
@@ -339,7 +338,7 @@ export class ProjectIndexService {
       return false;
     }
 
-    const changed = await this.taskParser.toggleTask(abstractFile, task, request.checked);
+    const changed = await this.taskParser.setTaskState(abstractFile, task, request.state);
     if (!changed) {
       return false;
     }
@@ -428,7 +427,8 @@ export class ProjectIndexService {
     const statuses = this.getStatusesForArea(area.id);
     const priorities = this.getPrioritiesForArea(area.id);
 
-    const customName = normalizeStringValue(frontmatter["custom-name"]) ?? file.basename;
+    const aliases = normalizeArrayValue(frontmatter.aliases);
+    const displayName = aliases[0] ?? file.basename;
     const rawStatus = normalizeListOrStringValue(frontmatter.status) ?? "To Do";
     const statusIsUnknown = !statuses.includes(rawStatus);
 
@@ -455,14 +455,15 @@ export class ProjectIndexService {
     const finishDate = normalizeStringValue(frontmatter["finish-date"]);
     const dueDate = normalizeStringValue(frontmatter["due-date"]);
 
-    const tasks = this.taskParser.parseTasks(content, file, customName);
+    const tasks = this.taskParser.parseTasks(content, file, displayName, requester);
 
     return {
       path: file.path,
       title: file.basename,
+      aliases,
+      displayName,
       areaId: area.id,
       areaName: area.name,
-      customName,
       status: statusIsUnknown ? UNKNOWN_STATUS : rawStatus,
       statusIsUnknown,
       priority,
@@ -501,9 +502,7 @@ export class ProjectIndexService {
   private projectSortValue(project: ProjectNote, sortBy: NonNullable<ProjectQuerySpec["sortBy"]>): string | number | null {
     switch (sortBy) {
       case "project":
-        return project.title;
-      case "custom-name":
-        return project.customName;
+        return project.displayName;
       case "status":
         return project.status;
       case "priority":
@@ -520,10 +519,6 @@ export class ProjectIndexService {
         return project.parentProject;
       case "requester":
         return project.requester.join(" ");
-      case "created-at":
-        return project.createdAt;
-      case "updated-at":
-        return project.updatedAt;
       default:
         return project.dueDate;
     }

@@ -1,46 +1,23 @@
 import type { App, TFile } from "obsidian";
-import type { AreaConfig } from "../types";
+import type { AreaConfig, ProjectSettings } from "../types";
 import { joinBlocksWithSpacing, parseH2Sections, splitFrontmatter, splitPreambleAndRest } from "../utils/markdown";
-
-function isNonEmptyString(input: unknown): input is string {
-  return typeof input === "string" && input.trim().length > 0;
-}
-
-function firstStringValue(input: unknown): string | null {
-  if (typeof input === "string") {
-    const trimmed = input.trim();
-    return trimmed.length > 0 ? trimmed : null;
-  }
-
-  if (Array.isArray(input)) {
-    for (const value of input) {
-      if (typeof value !== "string") {
-        continue;
-      }
-
-      const trimmed = value.trim();
-      if (trimmed.length > 0) {
-        return trimmed;
-      }
-    }
-  }
-
-  return null;
-}
+import { canonicalPropertyName, resolveAreaPropertyTemplates, resolvePropertyDefaultValue } from "../utils/properties";
 
 export class ProjectNormalizer {
   private readonly app: App;
+  private readonly getSettings: () => ProjectSettings;
   private readonly inFlight = new Set<string>();
 
-  constructor(app: App) {
+  constructor(app: App, getSettings: () => ProjectSettings) {
     this.app = app;
+    this.getSettings = getSettings;
   }
 
   isNormalizing(path: string): boolean {
     return this.inFlight.has(path);
   }
 
-  async normalizeFile(file: TFile, _area: AreaConfig): Promise<boolean> {
+  async normalizeFile(file: TFile, area: AreaConfig): Promise<boolean> {
     if (this.inFlight.has(file.path)) {
       return false;
     }
@@ -48,65 +25,23 @@ export class ProjectNormalizer {
     this.inFlight.add(file.path);
 
     try {
+      const templates = resolveAreaPropertyTemplates(this.getSettings(), area);
       let frontmatterChanged = false;
       await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
-        if (!isNonEmptyString(frontmatter["custom-name"])) {
-          frontmatter["custom-name"] = file.basename;
+        const existingNames = new Set<string>(
+          Object.keys(frontmatter).map((name) => canonicalPropertyName(name)),
+        );
+
+        for (const template of templates) {
+          const key = canonicalPropertyName(template.name);
+          if (existingNames.has(key)) {
+            continue;
+          }
+
+          frontmatter[template.name] = resolvePropertyDefaultValue(template, area, file);
+          existingNames.add(key);
           frontmatterChanged = true;
         }
-
-        const statusValue = firstStringValue(frontmatter.status) ?? "To Do";
-        if (!Array.isArray(frontmatter.status) || frontmatter.status[0] !== statusValue || frontmatter.status.length !== 1) {
-          frontmatter.status = [statusValue];
-          frontmatterChanged = true;
-        }
-
-        const priorityValue = firstStringValue(frontmatter.priority) ?? "Medium";
-        if (
-          !Array.isArray(frontmatter.priority) ||
-          frontmatter.priority[0] !== priorityValue ||
-          frontmatter.priority.length !== 1
-        ) {
-          frontmatter.priority = [priorityValue];
-          frontmatterChanged = true;
-        }
-
-        if (!("start-date" in frontmatter)) {
-          frontmatter["start-date"] = null;
-          frontmatterChanged = true;
-        }
-
-        if (!("finish-date" in frontmatter)) {
-          frontmatter["finish-date"] = null;
-          frontmatterChanged = true;
-        }
-
-        if (!("due-date" in frontmatter)) {
-          frontmatter["due-date"] = null;
-          frontmatterChanged = true;
-        }
-
-        if (!("parent-project" in frontmatter)) {
-          frontmatter["parent-project"] = "";
-          frontmatterChanged = true;
-        }
-
-        if (!Array.isArray(frontmatter.requester)) {
-          const requesterValue = firstStringValue(frontmatter.requester);
-          frontmatter.requester = requesterValue ? [requesterValue] : [];
-          frontmatterChanged = true;
-        }
-
-        if (!isNonEmptyString(frontmatter["created-at"])) {
-          frontmatter["created-at"] = new Date(file.stat.ctime).toISOString();
-          frontmatterChanged = true;
-        }
-
-        if (!isNonEmptyString(frontmatter["updated-at"])) {
-          frontmatter["updated-at"] = new Date(file.stat.mtime).toISOString();
-          frontmatterChanged = true;
-        }
-
       });
 
       const content = await this.app.vault.cachedRead(file);

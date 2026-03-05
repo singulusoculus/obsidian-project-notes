@@ -1,15 +1,19 @@
 import type { App, TFile } from "obsidian";
-import type { AddTaskRequest, ProjectTask } from "../types";
+import type { AddTaskRequest, ProjectTask, TaskState } from "../types";
 import { TASK_FINISHED_EMOJI } from "../constants";
 import { splitFrontmatter } from "../utils/markdown";
 import { isIsoDate, todayIsoDate } from "../utils/text";
 
-const CHECKBOX_REGEX = /^(\s*)- \[( |x|X)\] (.*)$/;
+const CHECKBOX_REGEX = /^(\s*)[-*+]\s+\[( |x|X|\/)\]\s*(.*)$/;
+const TASKS_HEADING_REGEX = /^##\s+tasks\b.*$/i;
 const START_REGEX = /🛫\s*(\d{4}-\d{2}-\d{2})/u;
+const START_REGEX_GLOBAL = /🛫\s*(\d{4}-\d{2}-\d{2})/gu;
 const DUE_REGEX = /📅\s*(\d{4}-\d{2}-\d{2})/u;
 const FINISHED_REGEX = /✅\s*(\d{4}-\d{2}-\d{2})/u;
 const FINISHED_REGEX_GLOBAL = /✅\s*(\d{4}-\d{2}-\d{2})/gu;
 const FINISHED_MARKER_REMOVE_REGEX = /\s*✅\s*\d{4}-\d{2}-\d{2}/gu;
+const HAS_FINISHED_MARKER_REGEX = /✅\s*\d{4}-\d{2}-\d{2}/u;
+const HAS_START_MARKER_REGEX = /🛫\s*\d{4}-\d{2}-\d{2}/u;
 
 export class TaskParser {
   private readonly app: App;
@@ -23,11 +27,11 @@ export class TaskParser {
     return this.inFlight.has(path);
   }
 
-  parseTasks(content: string, file: TFile, projectName: string): ProjectTask[] {
+  parseTasks(content: string, file: TFile, projectName: string, projectRequester: string[]): ProjectTask[] {
     const { body, frontmatterLineCount } = splitFrontmatter(content);
     const lines = body.split(/\r?\n/);
 
-    const tasksHeadingIndex = lines.findIndex((line) => /^##\s+tasks\s*$/i.test(line.trim()));
+    const tasksHeadingIndex = this.findTasksHeadingIndex(lines);
     if (tasksHeadingIndex < 0) {
       return [];
     }
@@ -44,7 +48,8 @@ export class TaskParser {
         continue;
       }
 
-      const checked = match[2].toLowerCase() === "x";
+      const state = this.markerToState(match[2]);
+      const checked = state === "checked";
       const text = match[3];
       const startDate = this.extractDate(START_REGEX, text);
       const dueDate = this.extractDate(DUE_REGEX, text);
@@ -55,8 +60,10 @@ export class TaskParser {
         id: `${file.path}:${fullLine}`,
         projectPath: file.path,
         projectName,
+        projectRequester: [...projectRequester],
         line: fullLine,
         text,
+        state,
         checked,
         startDate,
         dueDate,
@@ -68,7 +75,7 @@ export class TaskParser {
     return tasks;
   }
 
-  async toggleTask(file: TFile, task: ProjectTask, checked: boolean): Promise<boolean> {
+  async setTaskState(file: TFile, task: ProjectTask, state: TaskState): Promise<boolean> {
     const content = await this.app.vault.read(file);
     const lines = content.split(/\r?\n/);
 
@@ -89,12 +96,14 @@ export class TaskParser {
 
     const indent = match[1];
     let text = match[3];
-    const targetCheckmark = checked ? "x" : " ";
+    const targetCheckmark = this.stateToMarker(state);
 
-    if (checked) {
+    if (state === "checked") {
       if (!FINISHED_REGEX.test(text)) {
         text = `${text} ${TASK_FINISHED_EMOJI} ${todayIsoDate()}`.trim();
       }
+    } else if (state === "in-progress") {
+      text = this.ensureStartDateMarker(this.removeFinishedDateMarkers(text));
     } else {
       text = text.replace(/\s*✅\s*\d{4}-\d{2}-\d{2}/u, "").trim();
     }
@@ -123,7 +132,7 @@ export class TaskParser {
     const { frontmatter, body } = splitFrontmatter(content);
     const lines = body.split(/\r?\n/);
 
-    const tasksHeadingIndex = lines.findIndex((line) => /^##\s+tasks\s*$/i.test(line.trim()));
+    const tasksHeadingIndex = this.findTasksHeadingIndex(lines);
     if (tasksHeadingIndex < 0) {
       return false;
     }
@@ -150,12 +159,31 @@ export class TaskParser {
     }
 
     const content = await this.app.vault.read(file);
+    const reconciled = this.reconcileCompletedDateMarkersInContent(content);
+    if (!reconciled.changed) {
+      return false;
+    }
+
+    this.inFlight.add(file.path);
+    try {
+      await this.app.vault.modify(file, reconciled.content);
+    } finally {
+      this.inFlight.delete(file.path);
+    }
+
+    return true;
+  }
+
+  reconcileCompletedDateMarkersInContent(content: string): { changed: boolean; content: string } {
     const { frontmatter, body } = splitFrontmatter(content);
     const lines = body.split(/\r?\n/);
 
-    const tasksHeadingIndex = lines.findIndex((line) => /^##\s+tasks\s*$/i.test(line.trim()));
+    const tasksHeadingIndex = this.findTasksHeadingIndex(lines);
     if (tasksHeadingIndex < 0) {
-      return false;
+      return {
+        changed: false,
+        content,
+      };
     }
 
     const nextHeadingIndex = lines.findIndex((line, index) => index > tasksHeadingIndex && /^##\s+\S/.test(line));
@@ -171,12 +199,19 @@ export class TaskParser {
       }
 
       const indent = match[1];
-      const checked = match[2].toLowerCase() === "x";
-      const checkmark = checked ? "x" : " ";
+      const state = this.markerToState(match[2]);
+      const checkmark = this.stateToMarker(state);
       const text = match[3];
-      const normalizedText = checked ? this.ensureFinishedDateMarker(text) : this.removeFinishedDateMarkers(text);
+      let normalizedText: string;
+      if (state === "checked") {
+        normalizedText = this.ensureFinishedDateMarker(text);
+      } else if (state === "in-progress") {
+        normalizedText = this.ensureStartDateMarker(this.removeFinishedDateMarkers(text));
+      } else {
+        normalizedText = this.removeFinishedDateMarkers(text);
+      }
 
-      if (normalizedText === text) {
+      if (normalizedText === text && match[2] === checkmark) {
         continue;
       }
 
@@ -185,17 +220,93 @@ export class TaskParser {
     }
 
     if (!changed) {
-      return false;
+      return {
+        changed: false,
+        content,
+      };
     }
 
-    this.inFlight.add(file.path);
-    try {
-      await this.app.vault.modify(file, `${frontmatter}${lines.join("\n")}`);
-    } finally {
-      this.inFlight.delete(file.path);
+    return {
+      changed: true,
+      content: `${frontmatter}${lines.join("\n")}`,
+    };
+  }
+
+  reconcileTriStateTransitionsInContent(
+    previousContent: string,
+    currentContent: string,
+    triStateEnabled: boolean,
+  ): { changed: boolean; content: string } {
+    if (!triStateEnabled) {
+      return {
+        changed: false,
+        content: currentContent,
+      };
     }
 
-    return true;
+    const previous = splitFrontmatter(previousContent);
+    const current = splitFrontmatter(currentContent);
+    const previousLines = previous.body.split(/\r?\n/);
+    const currentLines = current.body.split(/\r?\n/);
+
+    const previousTasksHeadingIndex = this.findTasksHeadingIndex(previousLines);
+    const currentTasksHeadingIndex = this.findTasksHeadingIndex(currentLines);
+    if (previousTasksHeadingIndex < 0 || currentTasksHeadingIndex < 0) {
+      return {
+        changed: false,
+        content: currentContent,
+      };
+    }
+
+    const previousSectionEnd = this.findTasksSectionEnd(previousLines, previousTasksHeadingIndex);
+    const currentSectionEnd = this.findTasksSectionEnd(currentLines, currentTasksHeadingIndex);
+    const maxSharedIndex = Math.min(previousSectionEnd, currentSectionEnd);
+
+    let changed = false;
+
+    for (let index = currentTasksHeadingIndex + 1; index < maxSharedIndex; index += 1) {
+      const currentLine = currentLines[index];
+      const currentMatch = currentLine.match(CHECKBOX_REGEX);
+      if (!currentMatch) {
+        continue;
+      }
+
+      const previousLine = previousLines[index];
+      const previousMatch = previousLine?.match(CHECKBOX_REGEX);
+      if (!previousMatch) {
+        continue;
+      }
+
+      const previousState = this.markerToState(previousMatch[2]);
+      const currentState = this.markerToState(currentMatch[2]);
+
+      if (previousState === currentState) {
+        continue;
+      }
+
+      const desiredState = this.resolveTriStateFromEditorTransition(previousState, currentState);
+      if (desiredState === currentState) {
+        continue;
+      }
+
+      const checkmark = this.stateToMarker(desiredState);
+      const text = this.normalizeTaskTextForState(currentMatch[3], desiredState);
+
+      currentLines[index] = `${currentMatch[1]}- [${checkmark}] ${text}`;
+      changed = true;
+    }
+
+    if (!changed) {
+      return {
+        changed: false,
+        content: currentContent,
+      };
+    }
+
+    return {
+      changed: true,
+      content: `${current.frontmatter}${currentLines.join("\n")}`,
+    };
   }
 
   private extractDate(pattern: RegExp, text: string): string | null {
@@ -229,6 +340,82 @@ export class TaskParser {
   }
 
   private removeFinishedDateMarkers(text: string): string {
+    if (!HAS_FINISHED_MARKER_REGEX.test(text)) {
+      return text;
+    }
+
     return text.replace(FINISHED_MARKER_REMOVE_REGEX, "").replace(/\s{2,}/g, " ").trim();
+  }
+
+  private ensureStartDateMarker(text: string): string {
+    if (HAS_START_MARKER_REGEX.test(text)) {
+      return text;
+    }
+
+    const existingFinishedDate = [...text.matchAll(FINISHED_REGEX_GLOBAL)][0]?.[1];
+    const existingStartDate = [...text.matchAll(START_REGEX_GLOBAL)][0]?.[1] ?? todayIsoDate();
+    let normalized = text;
+    if (existingFinishedDate) {
+      normalized = this.removeFinishedDateMarkers(normalized);
+    }
+
+    return `${normalized} 🛫 ${existingStartDate}`.trim();
+  }
+
+  private findTasksHeadingIndex(lines: string[]): number {
+    return lines.findIndex((line) => TASKS_HEADING_REGEX.test(line.trim()));
+  }
+
+  private findTasksSectionEnd(lines: string[], tasksHeadingIndex: number): number {
+    const nextHeadingIndex = lines.findIndex((line, index) => index > tasksHeadingIndex && /^##\s+\S/.test(line));
+    return nextHeadingIndex >= 0 ? nextHeadingIndex : lines.length;
+  }
+
+  private markerToState(marker: string): TaskState {
+    if (marker === "/") {
+      return "in-progress";
+    }
+
+    if (marker.toLowerCase() === "x") {
+      return "checked";
+    }
+
+    return "unchecked";
+  }
+
+  private stateToMarker(state: TaskState): string {
+    if (state === "checked") {
+      return "x";
+    }
+
+    if (state === "in-progress") {
+      return "/";
+    }
+
+    return " ";
+  }
+
+  private resolveTriStateFromEditorTransition(previous: TaskState, current: TaskState): TaskState {
+    if (previous === "unchecked" && current === "checked") {
+      return "in-progress";
+    }
+
+    if (previous === "in-progress" && current === "unchecked") {
+      return "checked";
+    }
+
+    return current;
+  }
+
+  private normalizeTaskTextForState(text: string, state: TaskState): string {
+    if (state === "checked") {
+      return this.ensureFinishedDateMarker(text);
+    }
+
+    if (state === "in-progress") {
+      return this.ensureStartDateMarker(this.removeFinishedDateMarkers(text));
+    }
+
+    return this.removeFinishedDateMarkers(text);
   }
 }

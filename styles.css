@@ -148,6 +148,27 @@
   border-right: 0;
 }
 
+.opn-sort-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+}
+
+.opn-sort-header:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: -2px;
+}
+
+.opn-sort-marker {
+  color: var(--text-muted);
+  min-width: 0.8em;
+}
+
 .opn-row-detail td {
   background: var(--background-secondary);
 }
@@ -167,19 +188,49 @@
   gap: 6px;
 }
 
-.opn-task-list label {
+.opn-task-list li {
   display: inline-flex;
   gap: 8px;
   align-items: flex-start;
 }
 
-button.link {
-  border: 0;
-  background: transparent;
+input.opn-task-checkbox[data-task-state="in-progress"] {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--background-modifier-border-hover, var(--background-modifier-border)) !important;
+  border-radius: 3px;
+  background:
+    linear-gradient(var(--interactive-accent), var(--interactive-accent)) center / 8px 2px no-repeat,
+    var(--background-primary) !important;
+  position: relative;
+  margin: 0;
+  vertical-align: middle;
+}
+
+.markdown-source-view.mod-cm6 .opn-task-in-progress-line input.task-list-item-checkbox {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--background-modifier-border-hover, var(--background-modifier-border)) !important;
+  border-radius: 3px;
+  background:
+    linear-gradient(var(--interactive-accent), var(--interactive-accent)) center / 8px 2px no-repeat,
+    var(--background-primary) !important;
+  position: relative;
+  vertical-align: middle;
+}
+
+a.opn-link {
   color: var(--text-accent);
-  padding: 0;
+  text-decoration: underline;
   cursor: pointer;
-  text-align: left;
+}
+
+a.opn-link:hover {
+  text-decoration: underline;
 }
 
 button.secondary {
@@ -305,15 +356,6 @@ button.secondary {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
-}
-
-.opn-custom .opn-kanban-column {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--background-secondary) 75%, var(--interactive-accent) 25%), var(--background-secondary));
-}
-
-.opn-bases .opn-kanban-column {
-  border-style: dashed;
-  background: color-mix(in srgb, var(--background-secondary) 75%, var(--background-primary) 25%);
 }
 
 @media (max-width: 900px) {

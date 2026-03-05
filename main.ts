@@ -2,6 +2,7 @@ import {
   App,
   FuzzySuggestModal,
   ItemView,
+  MarkdownView,
   Modal,
   Notice,
   Plugin,
@@ -12,20 +13,38 @@ import {
   TextComponent,
   type WorkspaceLeaf,
 } from "obsidian";
+import { RangeSetBuilder } from "@codemirror/state";
+import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { mount, unmount } from "svelte";
 import ProjectBoard from "./src/components/ProjectBoard.svelte";
-import { DEFAULT_SETTINGS, REQUIRED_PROPERTY_TYPES, VIEW_TYPES } from "./src/lib/constants";
+import {
+  DEFAULT_SETTINGS,
+  DEFAULT_VALUE_TOKENS,
+  LOCKED_PROPERTY_NAMES,
+  PROJECT_PROPERTY_TYPE_OPTIONS,
+  VIEW_TYPES,
+} from "./src/lib/constants";
 import { NoteOpenService } from "./src/lib/services/noteOpenService";
 import { ProjectIndexService } from "./src/lib/services/projectIndexService";
 import { ProjectNormalizer } from "./src/lib/services/projectNormalizer";
 import { TaskParser } from "./src/lib/services/taskParser";
-import { parsePersistedData } from "./src/lib/settings";
+import { makeNewArea, parsePersistedData } from "./src/lib/settings";
 import { ProjectViewStore } from "./src/lib/stores/projectViewStore";
+import { resolveAreaForPath } from "./src/lib/utils/areas";
+import {
+  buildConfiguredPropertyTypeMap,
+  canonicalPropertyName,
+  isLockedPropertyName,
+  normalizePropertyName,
+  normalizePropertyType,
+} from "./src/lib/utils/properties";
 import type {
   AddTaskRequest,
   AreaConfig,
   BoardType,
   OpenTarget,
+  ProjectPropertyTemplate,
+  StartupView,
   ProjectNote,
   PluginPersistedData,
   ProjectSettings,
@@ -40,32 +59,95 @@ interface ViewDefinition {
   variant: ViewVariant;
 }
 
-const VIEW_DEFINITIONS: ViewDefinition[] = [
+const PRIMARY_VIEW_DEFINITIONS: ViewDefinition[] = [
   {
-    type: VIEW_TYPES.customGrid,
-    displayText: "Project Notes Grid (Custom)",
+    type: VIEW_TYPES.grid,
+    displayText: "Project Notes Grid",
     boardType: "grid",
-    variant: "custom",
+    variant: "default",
   },
   {
-    type: VIEW_TYPES.customKanban,
-    displayText: "Project Notes Kanban (Custom)",
+    type: VIEW_TYPES.kanban,
+    displayText: "Project Notes Kanban",
     boardType: "kanban",
-    variant: "custom",
-  },
-  {
-    type: VIEW_TYPES.basesGrid,
-    displayText: "Project Notes Grid (Bases)",
-    boardType: "grid",
-    variant: "bases",
-  },
-  {
-    type: VIEW_TYPES.basesKanban,
-    displayText: "Project Notes Kanban (Bases)",
-    boardType: "kanban",
-    variant: "bases",
+    variant: "default",
   },
 ];
+
+const LEGACY_VIEW_DEFINITIONS: ViewDefinition[] = [
+  {
+    type: "project-notes-grid-custom",
+    displayText: "Project Notes Grid",
+    boardType: "grid",
+    variant: "default",
+  },
+  {
+    type: "project-notes-kanban-custom",
+    displayText: "Project Notes Kanban",
+    boardType: "kanban",
+    variant: "default",
+  },
+  {
+    type: "project-notes-grid-bases",
+    displayText: "Project Notes Grid",
+    boardType: "grid",
+    variant: "default",
+  },
+  {
+    type: "project-notes-kanban-bases",
+    displayText: "Project Notes Kanban",
+    boardType: "kanban",
+    variant: "default",
+  },
+];
+
+const ALL_VIEW_DEFINITIONS = [...PRIMARY_VIEW_DEFINITIONS, ...LEGACY_VIEW_DEFINITIONS];
+const IN_PROGRESS_TASK_LINE_REGEX = /^\s*[-*+]\s+\[\/\]\s*/;
+
+function createTriStateLineDecorationExtension() {
+  const inProgressLine = Decoration.line({ class: "opn-task-in-progress-line" });
+
+  return ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet;
+
+      constructor(view: EditorView) {
+        this.decorations = this.buildDecorations(view);
+      }
+
+      update(update: ViewUpdate): void {
+        if (update.docChanged || update.viewportChanged) {
+          this.decorations = this.buildDecorations(update.view);
+        }
+      }
+
+      private buildDecorations(view: EditorView): DecorationSet {
+        const builder = new RangeSetBuilder<Decoration>();
+
+        for (const { from, to } of view.visibleRanges) {
+          let line = view.state.doc.lineAt(from);
+          const end = to;
+
+          while (true) {
+            if (IN_PROGRESS_TASK_LINE_REGEX.test(line.text)) {
+              builder.add(line.from, line.from, inProgressLine);
+            }
+
+            if (line.to >= end || line.number >= view.state.doc.lines) {
+              break;
+            }
+            line = view.state.doc.line(line.number + 1);
+          }
+        }
+
+        return builder.finish();
+      }
+    },
+    {
+      decorations: (value) => value.decorations,
+    },
+  );
+}
 
 class ProjectNotesView extends ItemView {
   private readonly plugin: ObsidianProjectNotesPlugin;
@@ -151,13 +233,13 @@ class ProjectNotesView extends ItemView {
 
     const typeFromLeaf = this.leaf?.getViewState()?.type;
     if (typeFromLeaf) {
-      const match = VIEW_DEFINITIONS.find((candidate) => candidate.type === typeFromLeaf);
+      const match = ALL_VIEW_DEFINITIONS.find((candidate) => candidate.type === typeFromLeaf);
       if (match) {
         return match;
       }
     }
 
-    return VIEW_DEFINITIONS[0];
+    return PRIMARY_VIEW_DEFINITIONS[0];
   }
 }
 
@@ -292,7 +374,7 @@ class AddTaskModal extends Modal {
     const projectSelect = projectWrapper.createEl("select", { attr: { id: "opn-task-project", "aria-label": "Project" } });
     for (const project of this.projects) {
       projectSelect.createEl("option", {
-        text: project.customName || project.title,
+        text: project.displayName || project.title,
         attr: { value: project.path },
       });
     }
@@ -420,6 +502,31 @@ class ProjectNotesSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
+      .setName("Open view on startup")
+      .setDesc("Project Notes view to open when Obsidian starts.")
+      .addDropdown((dropdown) => {
+        dropdown.addOption("none", "None");
+        for (const definition of PRIMARY_VIEW_DEFINITIONS) {
+          dropdown.addOption(definition.type, definition.displayText);
+        }
+
+        dropdown.setValue(this.plugin.settings.startupView).onChange(async (value) => {
+          this.plugin.settings.startupView = value as StartupView;
+          await this.plugin.saveSettings({ reconcile: false });
+        });
+      });
+
+    new Setting(containerEl)
+      .setName("Tri-state task checkboxes")
+      .setDesc("Cycle task checkbox states as unchecked -> in progress ([/]) -> checked -> unchecked.")
+      .addToggle((toggle) => {
+        toggle.setValue(this.plugin.settings.enableTriStateCheckboxes).onChange(async (value) => {
+          this.plugin.settings.enableTriStateCheckboxes = value;
+          await this.plugin.saveSettings({ reconcile: false });
+        });
+      });
+
+    new Setting(containerEl)
       .setName("Statuses")
       .setDesc("Comma-separated statuses. You can override this per Area.")
       .addTextArea((text) => {
@@ -441,6 +548,39 @@ class ProjectNotesSettingTab extends PluginSettingTab {
         });
       });
 
+    containerEl.createEl("h3", { text: "Project Properties" });
+    containerEl.createEl("p", {
+      text: "Define default properties auto-added to new/normalized project notes. Missing properties are added; existing values are preserved.",
+    });
+
+    const tokenListEl = containerEl.createDiv();
+    tokenListEl.createEl("strong", { text: "Dynamic default tokens: " });
+    tokenListEl.createEl("span", {
+      text: DEFAULT_VALUE_TOKENS.map((token) => `${token.token} (${token.description})`).join(", "),
+    });
+
+    this.renderPropertyTemplateEditor({
+      containerEl,
+      heading: "Global default properties",
+      templates: this.plugin.settings.defaultProperties,
+      lockProtectedProperties: true,
+      onChange: async () => {
+        await this.plugin.saveSettings({ reconcile: false, syncPropertyTypes: true });
+      },
+      onAdd: async () => {
+        this.plugin.settings.defaultProperties.push({
+          name: this.nextPropertyName(this.plugin.settings.defaultProperties, "new-property"),
+          type: "text",
+          defaultValue: "",
+        });
+        await this.plugin.saveSettings({ reconcile: false, syncPropertyTypes: true });
+      },
+      onRemove: async (index) => {
+        this.plugin.settings.defaultProperties.splice(index, 1);
+        await this.plugin.saveSettings({ reconcile: false, syncPropertyTypes: true });
+      },
+    });
+
     new Setting(containerEl)
       .setName("Default project status filter")
       .setDesc("Comma-separated statuses used as default Grid/Kanban filter.")
@@ -458,7 +598,6 @@ class ProjectNotesSettingTab extends PluginSettingTab {
       .addDropdown((dropdown) => {
         dropdown
           .addOption("project", "Project")
-          .addOption("custom-name", "Custom Name")
           .addOption("status", "Status")
           .addOption("priority", "Priority")
           .addOption("start-date", "Start Date")
@@ -467,8 +606,6 @@ class ProjectNotesSettingTab extends PluginSettingTab {
           .addOption("tags", "Tags")
           .addOption("parent-project", "Parent Project")
           .addOption("requester", "Requester")
-          .addOption("created-at", "Created At")
-          .addOption("updated-at", "Updated At")
           .setValue(this.plugin.settings.defaultSortBy)
           .onChange(async (value) => {
             this.plugin.settings.defaultSortBy = value as ProjectSettings["defaultSortBy"];
@@ -575,6 +712,43 @@ class ProjectNotesSettingTab extends PluginSettingTab {
         });
 
       new Setting(areaContainer)
+        .setName("Disabled global properties")
+        .setDesc("Comma-separated property names to skip auto-adding in this Area. Locked properties are ignored.")
+        .addText((text) => {
+          text.setValue((area.disabledPropertyNames ?? []).join(", ")).onChange(async (value) => {
+            area.disabledPropertyNames = parseCsv(value)
+              .map((name) => canonicalPropertyName(name))
+              .filter((name) => name.length > 0)
+              .filter((name) => !LOCKED_PROPERTY_NAMES.has(name));
+            await this.plugin.saveSettings({ reconcile: false, syncPropertyTypes: true });
+          });
+        });
+
+      this.renderPropertyTemplateEditor({
+        containerEl: areaContainer,
+        heading: "Area property overrides",
+        templates: area.propertyOverrides ?? (area.propertyOverrides = []),
+        lockProtectedProperties: true,
+        onChange: async () => {
+          await this.plugin.saveSettings({ reconcile: false, syncPropertyTypes: true });
+        },
+        onAdd: async () => {
+          const overrides = area.propertyOverrides ?? (area.propertyOverrides = []);
+          overrides.push({
+            name: this.nextPropertyName(overrides, "area-property"),
+            type: "text",
+            defaultValue: "",
+          });
+          await this.plugin.saveSettings({ reconcile: false, syncPropertyTypes: true });
+        },
+        onRemove: async (index) => {
+          const overrides = area.propertyOverrides ?? (area.propertyOverrides = []);
+          overrides.splice(index, 1);
+          await this.plugin.saveSettings({ reconcile: false, syncPropertyTypes: true });
+        },
+      });
+
+      new Setting(areaContainer)
         .setName("Remove Area")
         .addButton((button) => {
           button
@@ -595,17 +769,135 @@ class ProjectNotesSettingTab extends PluginSettingTab {
         button
           .setButtonText("Add")
           .onClick(async () => {
-            this.plugin.settings.areas.push({
-              id: `area-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-              name: "",
-              slug: "",
-              folderPath: "",
-              includeMode: "recursive",
-            });
+            this.plugin.settings.areas.push(makeNewArea());
             await this.plugin.saveSettings({ reconcile: false });
             this.display();
           });
       });
+  }
+
+  private renderPropertyTemplateEditor(options: {
+    containerEl: HTMLElement;
+    heading: string;
+    templates: ProjectPropertyTemplate[];
+    lockProtectedProperties: boolean;
+    onChange: () => Promise<void>;
+    onAdd: () => Promise<void>;
+    onRemove: (index: number) => Promise<void>;
+  }): void {
+    const sectionEl = options.containerEl.createDiv({ cls: "opn-area-setting" });
+    sectionEl.createEl("h4", { text: options.heading });
+
+    if (options.templates.length === 0) {
+      sectionEl.createEl("p", { text: "No properties configured." });
+    }
+
+    options.templates.forEach((template, index) => {
+      const locked = options.lockProtectedProperties && isLockedPropertyName(template.name);
+      const propertyName = template.name || `Property ${index + 1}`;
+
+      const setting = new Setting(sectionEl);
+      setting
+        .setName(locked ? `${propertyName} (locked)` : propertyName)
+        .setDesc("Name, type, default value")
+        .addText((text) => {
+          text
+            .setPlaceholder("property-name")
+            .setValue(template.name)
+            .setDisabled(locked)
+            .onChange(async (value) => {
+              const normalizedName = normalizePropertyName(value);
+              if (normalizedName.length === 0) {
+                return;
+              }
+
+              if (options.lockProtectedProperties && isLockedPropertyName(normalizedName)) {
+                new Notice(`Property '${normalizedName}' is locked and cannot be overridden.`);
+                text.setValue(template.name);
+                return;
+              }
+
+              if (this.hasDuplicatePropertyName(options.templates, index, normalizedName)) {
+                new Notice(`Property '${normalizedName}' already exists in this list.`);
+                text.setValue(template.name);
+                return;
+              }
+
+              template.name = normalizedName;
+              await options.onChange();
+            });
+        })
+        .addDropdown((dropdown) => {
+          for (const option of PROJECT_PROPERTY_TYPE_OPTIONS) {
+            dropdown.addOption(option.value, option.label);
+          }
+
+          dropdown
+            .setValue(template.type)
+            .setDisabled(locked)
+            .onChange(async (value) => {
+              template.type = normalizePropertyType(value);
+              await options.onChange();
+            });
+        })
+        .addText((text) => {
+          text
+            .setPlaceholder("default value")
+            .setValue(template.defaultValue ?? "")
+            .onChange(async (value) => {
+              template.defaultValue = value;
+              await options.onChange();
+            });
+        });
+
+      if (!locked) {
+        setting.addExtraButton((button) => {
+          button
+            .setIcon("cross")
+            .setTooltip("Remove property")
+            .onClick(async () => {
+              await options.onRemove(index);
+              this.display();
+            });
+        });
+      }
+    });
+
+    new Setting(sectionEl)
+      .setName("Add property")
+      .addButton((button) => {
+        button.setButtonText("Add").onClick(async () => {
+          await options.onAdd();
+          this.display();
+        });
+      });
+  }
+
+  private hasDuplicatePropertyName(templates: ProjectPropertyTemplate[], currentIndex: number, nextName: string): boolean {
+    const target = canonicalPropertyName(nextName);
+    return templates.some((template, index) => {
+      if (index === currentIndex) {
+        return false;
+      }
+
+      return canonicalPropertyName(template.name) === target;
+    });
+  }
+
+  private nextPropertyName(templates: ProjectPropertyTemplate[], baseName: string): string {
+    const base = canonicalPropertyName(baseName) || "new-property";
+    const existing = new Set(templates.map((template) => canonicalPropertyName(template.name)));
+
+    if (!existing.has(base)) {
+      return base;
+    }
+
+    let index = 2;
+    while (existing.has(`${base}-${index}`)) {
+      index += 1;
+    }
+
+    return `${base}-${index}`;
   }
 }
 
@@ -626,6 +918,8 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
     areas: [],
     statuses: [...DEFAULT_SETTINGS.statuses],
     priorities: [...DEFAULT_SETTINGS.priorities],
+    defaultProperties: DEFAULT_SETTINGS.defaultProperties.map((property) => ({ ...property })),
+    enableTriStateCheckboxes: DEFAULT_SETTINGS.enableTriStateCheckboxes,
     defaultProjectStatuses: [...DEFAULT_SETTINGS.defaultProjectStatuses],
     kanbanHiddenStatuses: [...DEFAULT_SETTINGS.kanbanHiddenStatuses],
   };
@@ -638,6 +932,8 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
   private persistTimer: number | null = null;
   private reconcileTimer: number | null = null;
   private intervalId: number | null = null;
+  private readonly editorSyncInFlight = new Set<string>();
+  private readonly previousEditorContentByPath = new Map<string, string>();
 
   async onload(): Promise<void> {
     const persisted = parsePersistedData(await this.loadData());
@@ -645,7 +941,7 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
 
     await this.ensureVaultPropertyTypes();
 
-    this.normalizer = new ProjectNormalizer(this.app);
+    this.normalizer = new ProjectNormalizer(this.app, () => this.settings);
     this.taskParser = new TaskParser(this.app);
     this.noteOpenService = new NoteOpenService(this.app, () => this.settings.openTarget);
 
@@ -662,6 +958,12 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
     this.registerViews();
     this.registerCommands();
     this.registerVaultEvents();
+    this.registerEditorEvents();
+    this.registerEditorExtension(createTriStateLineDecorationExtension());
+    this.seedActiveEditorContent();
+    this.app.workspace.onLayoutReady(() => {
+      void this.openStartupView();
+    });
     this.addSettingTab(new ProjectNotesSettingTab(this.app, this));
     this.registerReconcileInterval();
   }
@@ -684,9 +986,12 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
     }
   }
 
-  async saveSettings(options: { reconcile?: boolean; resetInterval?: boolean } = {}): Promise<void> {
+  async saveSettings(
+    options: { reconcile?: boolean; resetInterval?: boolean; syncPropertyTypes?: boolean } = {},
+  ): Promise<void> {
     const shouldReconcile = options.reconcile ?? true;
     const resetInterval = options.resetInterval ?? false;
+    const syncPropertyTypes = options.syncPropertyTypes ?? false;
 
     if (shouldReconcile) {
       this.scheduleReconcile();
@@ -696,18 +1001,22 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
       this.registerReconcileInterval();
     }
 
+    if (syncPropertyTypes) {
+      await this.ensureVaultPropertyTypes();
+    }
+
     this.indexService.notifyExternalChange();
     this.schedulePersist();
   }
 
   private registerViews(): void {
-    for (const definition of VIEW_DEFINITIONS) {
+    for (const definition of ALL_VIEW_DEFINITIONS) {
       this.registerView(definition.type, (leaf) => new ProjectNotesView(leaf, this, definition));
     }
   }
 
   private registerCommands(): void {
-    for (const definition of VIEW_DEFINITIONS) {
+    for (const definition of PRIMARY_VIEW_DEFINITIONS) {
       this.addCommand({
         id: `open-${definition.type}`,
         name: definition.displayText,
@@ -730,6 +1039,14 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
       name: "Rebuild Project Notes Index",
       callback: () => {
         void this.indexService.reconcileAllAreas({ normalize: true });
+      },
+    });
+
+    this.addCommand({
+      id: "backfill-missing-project-properties",
+      name: "Backfill Missing Project Properties",
+      callback: () => {
+        void this.backfillMissingProperties();
       },
     });
   }
@@ -784,6 +1101,95 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
         void this.indexService.onFileMetadataChanged(file);
       }),
     );
+  }
+
+  private registerEditorEvents(): void {
+    this.registerEvent(
+      this.app.workspace.on("editor-change", (editor, info) => {
+        const file = info.file;
+        if (!file || file.extension !== "md") {
+          return;
+        }
+
+        if (this.editorSyncInFlight.has(file.path)) {
+          return;
+        }
+
+        const area = resolveAreaForPath(this.settings.areas, file.path);
+        if (!area) {
+          this.previousEditorContentByPath.set(file.path, editor.getValue());
+          return;
+        }
+
+        const currentContent = editor.getValue();
+        const previousContent = this.previousEditorContentByPath.get(file.path) ?? currentContent;
+
+        const triStateReconciled = this.taskParser.reconcileTriStateTransitionsInContent(
+          previousContent,
+          currentContent,
+          this.settings.enableTriStateCheckboxes,
+        );
+
+        const completionReconciled = this.taskParser.reconcileCompletedDateMarkersInContent(triStateReconciled.content);
+        const finalContent = completionReconciled.content;
+
+        if (finalContent === currentContent) {
+          this.previousEditorContentByPath.set(file.path, currentContent);
+          return;
+        }
+
+        const selections = editor.listSelections();
+        this.editorSyncInFlight.add(file.path);
+        try {
+          editor.setValue(finalContent);
+          this.previousEditorContentByPath.set(file.path, finalContent);
+          if (selections.length > 0) {
+            try {
+              editor.setSelections(selections);
+            } catch (error) {
+              // Ignore selection restore failures; the edit should still apply.
+            }
+          }
+        } finally {
+          window.setTimeout(() => {
+            this.editorSyncInFlight.delete(file.path);
+          }, 0);
+        }
+      }),
+    );
+
+    this.registerEvent(
+      this.app.workspace.on("file-open", (file) => {
+        if (!file) {
+          return;
+        }
+
+        const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+        if (markdownView?.file?.path === file.path) {
+          this.previousEditorContentByPath.set(file.path, markdownView.editor.getValue());
+          return;
+        }
+
+        if (this.previousEditorContentByPath.has(file.path)) {
+          return;
+        }
+
+        void this.app.vault.cachedRead(file).then((content) => {
+          if (!this.previousEditorContentByPath.has(file.path)) {
+            this.previousEditorContentByPath.set(file.path, content);
+          }
+        });
+      }),
+    );
+  }
+
+  private seedActiveEditorContent(): void {
+    const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!markdownView?.file) {
+      return;
+    }
+
+    this.previousEditorContentByPath.set(markdownView.file.path, markdownView.editor.getValue());
   }
 
   private registerReconcileInterval(): void {
@@ -851,6 +1257,15 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
     this.app.workspace.revealLeaf(leaf);
   }
 
+  private async openStartupView(): Promise<void> {
+    const startupView = this.settings.startupView;
+    if (startupView === "none") {
+      return;
+    }
+
+    await this.activateView(startupView);
+  }
+
   async createProjectNote(): Promise<void> {
     if (this.settings.areas.length === 0) {
       new Notice("No Areas configured. Add one in plugin settings first.");
@@ -908,6 +1323,12 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
     new Notice("Task added.");
   }
 
+  private async backfillMissingProperties(): Promise<void> {
+    new Notice("Backfilling missing project properties...");
+    await this.indexService.reconcileAllAreas({ normalize: true });
+    new Notice("Backfill complete.");
+  }
+
   private async promptAreaSelection(): Promise<AreaConfig | null> {
     return new Promise((resolve) => {
       const modal = new AreaSuggestModal(this.app, this.settings.areas, resolve);
@@ -958,8 +1379,9 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
     const currentTypes = (existing.types as Record<string, string> | undefined) ?? {};
     const mergedTypes: Record<string, string> = { ...currentTypes };
     let changed = false;
+    const configuredTypes = buildConfiguredPropertyTypeMap(this.settings);
 
-    for (const [key, value] of Object.entries(REQUIRED_PROPERTY_TYPES)) {
+    for (const [key, value] of Object.entries(configuredTypes)) {
       if (mergedTypes[key] === value) {
         continue;
       }

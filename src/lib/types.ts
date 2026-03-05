@@ -1,4 +1,8 @@
 export type IncludeMode = "top-level" | "recursive";
+export type StartupView =
+  | "none"
+  | "project-notes-grid"
+  | "project-notes-kanban";
 
 export type OpenTarget =
   | "new-tab"
@@ -9,12 +13,19 @@ export type OpenTarget =
   | "bottom-split";
 
 export type BoardType = "grid" | "kanban";
-export type ViewVariant = "custom" | "bases";
+export type ViewVariant = "default";
 export type SortDirection = "asc" | "desc";
+export type ProjectPropertyType = "text" | "number" | "checkbox" | "date" | "datetime" | "multitext" | "tags" | "aliases";
+export type TaskState = "unchecked" | "in-progress" | "checked";
+
+export interface ProjectPropertyTemplate {
+  name: string;
+  type: ProjectPropertyType;
+  defaultValue: string;
+}
 
 export type ProjectSortField =
   | "project"
-  | "custom-name"
   | "status"
   | "priority"
   | "start-date"
@@ -22,9 +33,7 @@ export type ProjectSortField =
   | "due-date"
   | "tags"
   | "parent-project"
-  | "requester"
-  | "created-at"
-  | "updated-at";
+  | "requester";
 
 export interface AreaConfig {
   id: string;
@@ -34,12 +43,17 @@ export interface AreaConfig {
   includeMode: IncludeMode;
   statusOverrides?: string[];
   priorityOverrides?: string[];
+  propertyOverrides?: ProjectPropertyTemplate[];
+  disabledPropertyNames?: string[];
 }
 
 export interface ProjectSettings {
   areas: AreaConfig[];
   statuses: string[];
   priorities: string[];
+  defaultProperties: ProjectPropertyTemplate[];
+  enableTriStateCheckboxes: boolean;
+  startupView: StartupView;
   openTarget: OpenTarget;
   defaultProjectStatuses: string[];
   defaultSortBy: ProjectSortField;
@@ -52,8 +66,10 @@ export interface ProjectTask {
   id: string;
   projectPath: string;
   projectName: string;
+  projectRequester: string[];
   line: number;
   text: string;
+  state: TaskState;
   checked: boolean;
   startDate: string | null;
   dueDate: string | null;
@@ -64,9 +80,10 @@ export interface ProjectTask {
 export interface ProjectNote {
   path: string;
   title: string;
+  aliases: string[];
+  displayName: string;
   areaId: string;
   areaName: string;
-  customName: string;
   status: string;
   statusIsUnknown: boolean;
   priority: string;
@@ -123,6 +140,8 @@ export interface ProjectViewState {
   sortDirection: SortDirection;
   projects: ProjectNote[];
   tasks: ProjectTask[];
+  showCompletedTasksInTaskView: boolean;
+  triStateCheckboxes: boolean;
   hiddenKanbanStatuses: string[];
   showHiddenKanban: boolean;
 }
@@ -141,7 +160,7 @@ export interface ProjectMetadataUpdate {
 
 export interface TaskToggleRequest {
   taskId: string;
-  checked: boolean;
+  state: TaskState;
 }
 
 export interface AddTaskRequest {
