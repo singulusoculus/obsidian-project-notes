@@ -119,5 +119,8 @@ This document chronicles the implementation journey, key decisions, lessons lear
   - editor extension marks visible `[/]` task lines with `opn-task-in-progress-line`
   - Live Preview styling now targets that class directly so rendering does not depend on Obsidian internal `data-task` attributes
   - switched half-fill indicator to background-layer rendering instead of pseudo-elements on `input` for reliable cross-engine display
+- Simplified tri-state Live Preview CSS to remove redundant fallback selectors.
+  - removed legacy `li[data-task]` and `.HyperMD-task-line[data-task]` paths
+  - kept the decoration-based selector (`.opn-task-in-progress-line`) as the single Live Preview styling path
 
 ### Work done 2026.03.04
