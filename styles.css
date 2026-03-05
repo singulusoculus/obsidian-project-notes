@@ -1,0 +1,335 @@
+.project-notes-view,
+.opn-board {
+  height: 100%;
+}
+
+.opn-board {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.opn-board-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.opn-board-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.opn-board-title h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.opn-board-title small {
+  color: var(--text-muted);
+}
+
+.opn-board-actions {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.opn-board-header label,
+.opn-grid-filter-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+.opn-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.opn-grid-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.opn-grid-tabs {
+  display: inline-flex;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  overflow: hidden;
+  width: fit-content;
+}
+
+.opn-grid-tabs button {
+  border: 0;
+  border-right: 1px solid var(--background-modifier-border);
+  background: transparent;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.opn-grid-tabs button:last-child {
+  border-right: 0;
+}
+
+.opn-grid-tabs button.active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.opn-grid-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+
+.opn-grid-filter-row input,
+.opn-grid-filter-row select,
+.opn-board-header select,
+.opn-table select {
+  min-width: 180px;
+}
+
+.opn-filter-groups {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.opn-filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+}
+
+.opn-filter-group > span {
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.opn-filter-group label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+.opn-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--background-modifier-border);
+}
+
+.opn-table th,
+.opn-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  border-right: 1px solid var(--background-modifier-border);
+  vertical-align: top;
+  font-size: 0.84rem;
+}
+
+.opn-table th:last-child,
+.opn-table td:last-child {
+  border-right: 0;
+}
+
+.opn-row-detail td {
+  background: var(--background-secondary);
+}
+
+.opn-task-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.opn-task-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.opn-task-list label {
+  display: inline-flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+button.link {
+  border: 0;
+  background: transparent;
+  color: var(--text-accent);
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+button.secondary {
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary-alt);
+  color: var(--text-normal);
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.opn-kanban {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.opn-kanban-scroll {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  min-height: 0;
+  flex: 1;
+}
+
+.opn-kanban-columns {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(260px, 1fr);
+  gap: 10px;
+  overflow-x: auto;
+  min-height: 0;
+}
+
+.opn-kanban-column {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+  display: flex;
+  flex-direction: column;
+  min-height: 320px;
+}
+
+.opn-kanban-column > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.opn-kanban-column h3 {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.opn-kanban-cards {
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.opn-kanban-card {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--background-primary);
+  display: grid;
+  gap: 8px;
+}
+
+.opn-card-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.opn-kanban-dropzones {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.opn-kanban-dropzone {
+  width: 140px;
+  border: 2px dashed var(--background-modifier-border-hover);
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+  background: var(--background-secondary-alt);
+  display: grid;
+  gap: 6px;
+}
+
+.opn-empty {
+  padding: 16px;
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+
+.opn-area-setting {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 12px;
+}
+
+.opn-area-setting h4 {
+  margin: 0 0 8px;
+}
+
+.opn-modal-field {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.opn-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.opn-custom .opn-kanban-column {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--background-secondary) 75%, var(--interactive-accent) 25%), var(--background-secondary));
+}
+
+.opn-bases .opn-kanban-column {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--background-secondary) 75%, var(--background-primary) 25%);
+}
+
+@media (max-width: 900px) {
+  .opn-grid-filter-row input,
+  .opn-grid-filter-row select,
+  .opn-board-header select,
+  .opn-table select {
+    min-width: 140px;
+  }
+
+  .opn-kanban-scroll {
+    grid-template-columns: 1fr;
+  }
+
+  .opn-kanban-dropzones {
+    grid-auto-flow: column;
+    overflow-x: auto;
+  }
+}

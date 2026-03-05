@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "settings": {
+    "areas": [
+      {
+        "id": "area-1772741878315-uiunz0",
+        "name": "Test",
+        "slug": "test",
+        "folderPath": "Project",
+        "includeMode": "top-level"
+      }
+    ],
+    "statuses": [
+      "To Do",
+      "Doing",
+      "Done",
+      "Cancelled",
+      "Awaiting Response"
+    ],
+    "priorities": [
+      "Low",
+      "Medium",
+      "High"
+    ],
+    "openTarget": "new-tab",
+    "defaultProjectStatuses": [
+      "Doing",
+      "Awaiting Response"
+    ],
+    "defaultSortBy": "due-date",
+    "defaultSortDirection": "asc",
+    "kanbanHiddenStatuses": [
+      "Done",
+      "Cancelled"
+    ],
+    "cacheReconcileMinutes": 10
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": 1772743880142,
+    "projects": [
+      {
+        "path": "Project/Another Project.md",
+        "title": "Another Project",
+        "areaId": "area-1772741878315-uiunz0",
+        "areaName": "Test",
+        "customName": "Another Project",
+        "status": "To Do",
+        "statusIsUnknown": false,
+        "priority": "Medium",
+        "startDate": null,
+        "finishDate": null,
+        "dueDate": null,
+        "tags": [],
+        "parentProject": null,
+        "requester": [],
+        "createdAt": 1772742547198,
+        "updatedAt": 1772743879337,
+        "tasks": [
+          {
+            "id": "Project/Another Project.md:17",
+            "projectPath": "Project/Another Project.md",
+            "projectName": "Another Project",
+            "line": 17,
+            "text": "This is a test task 🛫 2026-03-05 📅 2026-03-06 ",
+            "checked": false,
+            "startDate": "2026-03-05",
+            "dueDate": "2026-03-06",
+            "finishedDate": null,
+            "rawLine": "- [ ] This is a test task 🛫 2026-03-05 📅 2026-03-06 "
+          },
+          {
+            "id": "Project/Another Project.md:18",
+            "projectPath": "Project/Another Project.md",
+            "projectName": "Another Project",
+            "line": 18,
+            "text": "This is another task 🛫 2026-03-05 📅 2026-03-06 ",
+            "checked": false,
+            "startDate": "2026-03-05",
+            "dueDate": "2026-03-06",
+            "finishedDate": null,
+            "rawLine": "- [ ] This is another task 🛫 2026-03-05 📅 2026-03-06 "
+          }
+        ]
+      },
+      {
+        "path": "Project/Test Project.md",
+        "title": "Test Project",
+        "areaId": "area-1772741878315-uiunz0",
+        "areaName": "Test",
+        "customName": "Test Project",
+        "status": "Doing",
+        "statusIsUnknown": false,
+        "priority": "Medium",
+        "startDate": null,
+        "finishDate": null,
+        "dueDate": null,
+        "tags": [],
+        "parentProject": null,
+        "requester": [],
+        "createdAt": 1772742226623,
+        "updatedAt": 1772743827341,
+        "tasks": [
+          {
+            "id": "Project/Test Project.md:17",
+            "projectPath": "Project/Test Project.md",
+            "projectName": "Test Project",
+            "line": 17,
+            "text": "This is a task 🛫 2026-03-05 📅 2026-03-06",
+            "checked": false,
+            "startDate": "2026-03-05",
+            "dueDate": "2026-03-06",
+            "finishedDate": null,
+            "rawLine": "- [ ] This is a task 🛫 2026-03-05 📅 2026-03-06"
+          }
+        ]
+      }
+    ]
+  }
+}
