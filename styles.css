@@ -11,11 +11,36 @@
 }
 
 .opn-board-header {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
   gap: 12px;
-  flex-wrap: wrap;
+}
+
+.opn-board-header-left,
+.opn-board-header-center,
+.opn-board-header-right {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.opn-board-header-left {
+  justify-self: start;
+}
+
+.opn-board-header-center {
+  justify-self: center;
+}
+
+.opn-board-header-right {
+  justify-self: end;
+}
+
+.opn-settings-shortcut {
+  min-width: 32px;
+  padding: 4px 8px;
+  line-height: 1;
 }
 
 .opn-board-title {
@@ -40,8 +65,8 @@
   flex-wrap: wrap;
 }
 
-.opn-board-header label,
-.opn-grid-filter-row label {
+.opn-board-header > label,
+.opn-grid-filter-row > label {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -69,28 +94,99 @@
   width: fit-content;
 }
 
-.opn-grid-tabs button {
+.opn-grid-tab {
   border: 0;
   border-right: 1px solid var(--background-modifier-border);
   background: transparent;
   padding: 6px 10px;
   cursor: pointer;
+  user-select: none;
 }
 
-.opn-grid-tabs button:last-child {
+.opn-grid-tab:last-child {
   border-right: 0;
 }
 
-.opn-grid-tabs button.active {
+.opn-grid-tab.active {
   background: var(--interactive-accent);
   color: var(--text-on-accent);
+}
+
+.opn-grid-tab:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: -2px;
 }
 
 .opn-grid-filter-row {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  align-items: end;
+  align-items: center;
+}
+
+.opn-projects-controls {
+  justify-content: space-between;
+}
+
+.opn-grid-filter-left,
+.opn-grid-filter-right {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.opn-grid-filter-right {
+  margin-left: auto;
+}
+
+.opn-inline-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+.opn-multiselect-wrap {
+  position: relative;
+}
+
+.opn-multiselect-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 60;
+  min-width: 220px;
+  max-width: min(320px, 80vw);
+  max-height: min(320px, 60vh);
+  overflow: auto;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s);
+}
+
+.opn-multiselect-menu label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+.opn-multiselect-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.opn-multiselect-action {
+  flex: 1;
+  text-align: center;
 }
 
 .opn-column-picker-wrap {
@@ -113,19 +209,12 @@
   box-shadow: var(--shadow-s);
 }
 
-.opn-column-picker section {
-  display: grid;
-  gap: 8px;
-}
-
 .opn-column-order-list {
   margin: 0;
   padding: 0;
   list-style: none;
   display: grid;
   gap: 6px;
-  max-height: 180px;
-  overflow: auto;
 }
 
 .opn-column-order-list li {
@@ -206,7 +295,7 @@
   padding: 8px;
   border-bottom: 1px solid var(--background-modifier-border);
   border-right: 1px solid var(--background-modifier-border);
-  vertical-align: top;
+  vertical-align: middle;
   font-size: 0.84rem;
 }
 
@@ -238,6 +327,33 @@
 
 .opn-row-detail td {
   background: var(--background-secondary);
+  vertical-align: top;
+}
+
+.opn-child-table {
+  margin-top: 8px;
+}
+
+.opn-badge-select {
+  min-width: 0 !important;
+  width: auto;
+  border: 1px solid var(--background-modifier-border-hover);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.25;
+  cursor: pointer;
+}
+
+.opn-status-badge {
+  background: var(--background-secondary-alt);
+  color: var(--text-normal);
+}
+
+.opn-priority-badge {
+  background: var(--background-secondary-alt);
+  color: var(--text-normal);
 }
 
 .opn-task-detail-header {
@@ -259,6 +375,42 @@
   display: inline-flex;
   gap: 8px;
   align-items: flex-start;
+}
+
+.opn-task-timing-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.opn-task-timing-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--background-modifier-border-hover);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  background: var(--background-secondary-alt);
+  color: var(--text-normal);
+}
+
+.opn-task-timing-current {
+  background: color-mix(in srgb, var(--color-green) 20%, var(--background-secondary-alt));
+}
+
+.opn-task-timing-due {
+  background: color-mix(in srgb, var(--color-orange) 20%, var(--background-secondary-alt));
+}
+
+.opn-task-timing-overdue {
+  background: color-mix(in srgb, var(--color-red) 22%, var(--background-secondary-alt));
+}
+
+.opn-task-timing-tomorrow {
+  background: color-mix(in srgb, var(--color-cyan) 18%, var(--background-secondary-alt));
 }
 
 input.opn-task-checkbox[data-task-state="in-progress"] {
@@ -355,6 +507,17 @@ button.secondary {
   font-size: 0.92rem;
 }
 
+.opn-kanban-column-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.opn-kanban-add {
+  line-height: 1;
+  padding: 2px 7px;
+}
+
 .opn-kanban-cards {
   padding: 10px;
   display: grid;
@@ -402,11 +565,50 @@ button.secondary {
   background: var(--background-secondary);
 }
 
+.opn-settings-tabs {
+  display: inline-flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.opn-settings-tab {
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary-alt);
+  color: var(--text-normal);
+  border-radius: 999px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.opn-settings-tab.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+.opn-settings-panel {
+  display: grid;
+  gap: 8px;
+}
+
 .opn-area-setting {
   border: 1px solid var(--background-modifier-border);
   border-radius: 10px;
   padding: 10px;
   margin-bottom: 12px;
+}
+
+.opn-area-disclosure {
+  display: block;
+}
+
+.opn-area-summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.opn-area-settings {
+  margin-top: 8px;
 }
 
 .opn-area-setting h4 {
@@ -419,6 +621,34 @@ button.secondary {
   margin-bottom: 10px;
 }
 
+.opn-task-project-select {
+  width: 100%;
+  height: auto !important;
+  min-height: 220px;
+  max-height: min(360px, 55vh);
+}
+
+.opn-task-project-picker {
+  position: relative;
+}
+
+.opn-task-project-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 80;
+  padding: 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s);
+}
+
+.opn-task-project-popover.is-hidden {
+  display: none;
+}
+
 .opn-modal-actions {
   display: flex;
   gap: 8px;
@@ -426,7 +656,26 @@ button.secondary {
 }
 
 @media (max-width: 900px) {
-  .opn-grid-filter-row input,
+  .opn-board-header {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .opn-board-header-left,
+  .opn-board-header-center,
+  .opn-board-header-right {
+    justify-self: stretch;
+  }
+
+  .opn-board-header-center {
+    justify-content: center;
+  }
+
+  .opn-board-header-right {
+    justify-content: flex-end;
+  }
+
+  .opn-grid-filter-row input:not([type="checkbox"]),
   .opn-grid-filter-row select,
   .opn-board-header select,
   .opn-table select {

@@ -1,4 +1,4 @@
-import { type App, TFile, type WorkspaceLeaf } from "obsidian";
+import { type App, MarkdownView, TFile, type WorkspaceLeaf } from "obsidian";
 import type { OpenTarget } from "../types";
 
 export class NoteOpenService {
@@ -12,9 +12,49 @@ export class NoteOpenService {
   }
 
   async openProject(path: string): Promise<boolean> {
+    const leaf = await this.openProjectInTarget(path);
+    return leaf !== null;
+  }
+
+  async openProjectLink(linkText: string, sourcePath?: string): Promise<boolean> {
+    const normalized = this.normalizeLinkPath(linkText);
+    if (!normalized) {
+      return false;
+    }
+
+    const resolved = this.app.metadataCache.getFirstLinkpathDest(normalized, sourcePath ?? "");
+    if (resolved instanceof TFile) {
+      return this.openProject(resolved.path);
+    }
+
+    const direct = this.app.vault.getAbstractFileByPath(normalized);
+    if (direct instanceof TFile) {
+      return this.openProject(direct.path);
+    }
+
+    const withExtension = normalized.endsWith(".md") ? normalized : `${normalized}.md`;
+    const fallback = this.app.vault.getAbstractFileByPath(withExtension);
+    if (fallback instanceof TFile) {
+      return this.openProject(fallback.path);
+    }
+
+    return false;
+  }
+
+  async openProjectTask(path: string, lineNumber: number): Promise<boolean> {
+    const leaf = await this.openProjectInTarget(path);
+    if (!leaf) {
+      return false;
+    }
+
+    this.scheduleTaskHighlight(leaf, lineNumber);
+    return true;
+  }
+
+  private async openProjectInTarget(path: string): Promise<WorkspaceLeaf | null> {
     const abstractFile = this.app.vault.getAbstractFileByPath(path);
     if (!(abstractFile instanceof TFile)) {
-      return false;
+      return null;
     }
 
     const target = this.getOpenTarget();
@@ -31,7 +71,64 @@ export class NoteOpenService {
       this.app.workspace.revealLeaf(leaf);
     }
 
-    return true;
+    return leaf;
+  }
+
+  private scheduleTaskHighlight(leaf: WorkspaceLeaf, lineNumber: number): void {
+    const targetLine = Math.max(0, lineNumber - 1);
+    const attemptDelays = [0, 120, 300];
+
+    for (const delay of attemptDelays) {
+      window.setTimeout(() => {
+        this.highlightTaskLine(leaf, targetLine);
+      }, delay);
+    }
+  }
+
+  private normalizeLinkPath(linkText: string): string {
+    const text = linkText.trim();
+    const wikiMatch = text.match(/^\[\[([^\]]+)\]\]$/u);
+    const inner = wikiMatch ? wikiMatch[1] : text;
+    const withoutAlias = inner.split("|", 1)[0] ?? "";
+    const withoutHeading = withoutAlias.split("#", 1)[0] ?? "";
+    return withoutHeading.trim();
+  }
+
+  private highlightTaskLine(leaf: WorkspaceLeaf, lineNumber: number): void {
+    const view = leaf.view;
+    if (!(view instanceof MarkdownView)) {
+      return;
+    }
+
+    const editor = view.editor;
+    if (!editor || editor.lineCount() === 0) {
+      return;
+    }
+
+    const maxLine = Math.max(0, editor.lineCount() - 1);
+    const clampedLine = Math.min(lineNumber, maxLine);
+    const lineText = editor.getLine(clampedLine) ?? "";
+    const from = { line: clampedLine, ch: 0 };
+    const to = { line: clampedLine, ch: lineText.length };
+
+    editor.setSelection(from, to);
+    editor.scrollIntoView({ from, to }, true);
+
+    window.setTimeout(() => {
+      const currentView = leaf.view;
+      if (!(currentView instanceof MarkdownView)) {
+        return;
+      }
+
+      const currentEditor = currentView.editor;
+      if (!currentEditor || currentEditor.lineCount() === 0) {
+        return;
+      }
+
+      const currentMax = Math.max(0, currentEditor.lineCount() - 1);
+      const currentLine = Math.min(clampedLine, currentMax);
+      currentEditor.setCursor({ line: currentLine, ch: 0 });
+    }, 1200);
   }
 
   private getTargetLeaf(target: OpenTarget): WorkspaceLeaf {

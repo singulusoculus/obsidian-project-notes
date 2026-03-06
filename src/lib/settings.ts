@@ -131,19 +131,24 @@ function normalizeStartupView(value: unknown): ProjectSettings["startupView"] {
     return "none";
   }
 
-  if (
-    value === "project-notes-grid" ||
-    value === "project-notes-kanban"
-  ) {
+  if (value === "projects" || value === "tasks" || value === "kanban") {
     return value;
   }
 
-  if (value === "project-notes-grid-custom" || value === "project-notes-grid-bases") {
-    return "project-notes-grid";
+  if (
+    value === "project-notes-grid" ||
+    value === "project-notes-grid-custom" ||
+    value === "project-notes-grid-bases"
+  ) {
+    return "projects";
   }
 
-  if (value === "project-notes-kanban-custom" || value === "project-notes-kanban-bases") {
-    return "project-notes-kanban";
+  if (
+    value === "project-notes-kanban" ||
+    value === "project-notes-kanban-custom" ||
+    value === "project-notes-kanban-bases"
+  ) {
+    return "kanban";
   }
 
   return DEFAULT_SETTINGS.startupView;

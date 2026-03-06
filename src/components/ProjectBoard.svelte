@@ -17,37 +17,85 @@
     const value = (event.currentTarget as HTMLSelectElement).value;
     viewStore.setArea(value);
   }
+
+  function setGridTab(tab: "projects" | "tasks" | "kanban"): void {
+    viewStore.setGridTab(tab);
+  }
+
+  function handleGridTabKeydown(event: KeyboardEvent, tab: "projects" | "tasks" | "kanban"): void {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      setGridTab(tab);
+    }
+  }
+
+  function openSettings(): void {
+    viewStore.openPluginSettings();
+  }
 </script>
 
 <div class={`opn-board opn-${variant}`}>
   <header class="opn-board-header">
-    <div class="opn-board-title">
-      <h2>{boardType === "grid" ? "Project Grid" : "Project Kanban"}</h2>
-      <small>{state.projects.length} projects</small>
+    <div class="opn-board-header-left">
+      <select
+        aria-label="Select area"
+        value={state.currentAreaId ?? ""}
+        onchange={handleAreaChange}
+      >
+        {#each state.areas as area (area.id)}
+          <option value={area.id}>{area.name}</option>
+        {/each}
+      </select>
     </div>
 
-    <div class="opn-board-actions">
+    <div class="opn-board-header-center">
+      <div class="opn-grid-tabs" role="tablist" aria-label="Project notes views">
+        <span
+          class="opn-grid-tab"
+          role="tab"
+          tabindex={state.gridTab === "projects" ? 0 : -1}
+          aria-selected={state.gridTab === "projects"}
+          class:active={state.gridTab === "projects"}
+          onclick={() => setGridTab("projects")}
+          onkeydown={(event) => handleGridTabKeydown(event, "projects")}
+        >
+          Projects
+        </span>
+        <span
+          class="opn-grid-tab"
+          role="tab"
+          tabindex={state.gridTab === "tasks" ? 0 : -1}
+          aria-selected={state.gridTab === "tasks"}
+          class:active={state.gridTab === "tasks"}
+          onclick={() => setGridTab("tasks")}
+          onkeydown={(event) => handleGridTabKeydown(event, "tasks")}
+        >
+          Tasks
+        </span>
+        <span
+          class="opn-grid-tab"
+          role="tab"
+          tabindex={state.gridTab === "kanban" ? 0 : -1}
+          aria-selected={state.gridTab === "kanban"}
+          class:active={state.gridTab === "kanban"}
+          onclick={() => setGridTab("kanban")}
+          onkeydown={(event) => handleGridTabKeydown(event, "kanban")}
+        >
+          Kanban
+        </span>
+      </div>
+    </div>
+
+    <div class="opn-board-header-right">
       <button
         type="button"
-        class="mod-cta"
-        aria-label="Add project"
-        onclick={() => void viewStore.createProjectNote()}
+        class="secondary opn-settings-shortcut"
+        aria-label="Open Project Notes settings"
+        title="Project Notes settings"
+        onclick={openSettings}
       >
-        Add Project
+        ⚙
       </button>
-
-      <label>
-        Area
-        <select
-          aria-label="Select area"
-          value={state.currentAreaId ?? ""}
-          onchange={handleAreaChange}
-        >
-          {#each state.areas as area (area.id)}
-            <option value={area.id}>{area.name}</option>
-          {/each}
-        </select>
-      </label>
     </div>
   </header>
 
@@ -56,9 +104,9 @@
       <h3>No Areas configured</h3>
       <p>Add an Area in plugin settings to start indexing projects.</p>
     </section>
-  {:else if boardType === "grid"}
-    <ProjectGrid {viewStore} {variant} />
-  {:else}
+  {:else if state.gridTab === "kanban"}
     <ProjectKanban {viewStore} {variant} />
+  {:else}
+    <ProjectGrid {viewStore} {variant} />
   {/if}
 </div>

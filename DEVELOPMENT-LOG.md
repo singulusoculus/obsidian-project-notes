@@ -6,6 +6,29 @@ This document chronicles the implementation journey, key decisions, lessons lear
 
 ## Pinned
 
+### Work done 2026.03.06
+- Reworked Projects-grid expanded task filtering:
+  - removed per-project `Show completed` control
+  - added global `Task Status` multiselect (`To Do`, `Doing`, `Done`) with tri-state-aware options (`To Do`, `Done` when tri-state is off)
+  - applied the same task-status filter behavior to expanded project tasks and Tasks grid rows
+- Updated Tasks view controls:
+  - replaced completed toggle with `Task Status` dropdown
+  - added computed `Timing Status` system with badge rendering and filter dropdown
+  - timing statuses now include `Current`, `Due`, `Overdue`, `Tomorrow`, `Future`, and `Needs Timing`
+  - set default timing filter selection to include all except `Future` (while keeping `Needs Timing` selected)
+- Added `All`/`None` quick actions to all multiselect dropdown menus in grid controls and updated labels/count logic to show `None`, `All`, or selected count.
+- Added explicit “none selected” handling for project `Status` and `Priority` filters using an internal sentinel so `None` actually deselects all.
+- Reordered controls and placeholders:
+  - search now appears first on the left in Projects, Tasks, and Kanban
+  - updated placeholders to `Search Projects` (Projects/Kanban) and `Search Tasks` (Tasks)
+  - moved `Columns` dropdown next to search in all views; right-side action area now keeps only the Add button
+- Upgraded Add Task project picker UX:
+  - replaced plain select with searchable project picker popover that opens on input focus/click
+  - supports live filtering, keyboard navigation, outside-click close, and explicit selection sync
+  - increased popover/list height for easier scanning
+  - restricted selectable projects to active statuses only (excludes Done/Cancelled)
+- Verified all changes with `npm run build` after each implementation batch.
+
 ### Work done 2026.03.05
 - Scaffolded the plugin from scratch in TypeScript with Svelte 5 (Runes), including build pipeline, manifest, styles, and version files.
 - Implemented cache-first core services:

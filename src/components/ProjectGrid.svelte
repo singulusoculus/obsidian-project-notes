@@ -5,20 +5,89 @@
     ProjectNote,
     ProjectSortField,
     ProjectTask,
+    SortDirection,
     TaskState,
     ViewVariant,
   } from "../lib/types";
+  import { FILTER_NONE_TOKEN } from "../lib/constants";
   import type { ProjectViewStore } from "../lib/stores/projectViewStore";
+  import ColumnPicker from "./shared/ColumnPicker.svelte";
+  import GridTable from "./shared/GridTable.svelte";
+  import SearchInput from "./shared/SearchInput.svelte";
+
+  interface TaskGridColumnConfig {
+    id: string;
+    label: string;
+    sortField: TaskSortField;
+    hideable?: boolean;
+  }
+
+  type TaskSortField = "state" | "task" | "project" | "requester" | "start" | "due" | "timing";
+  type ProjectsViewMode = "project-task" | "parent-child";
+  type TaskStatusFilterOption = "To Do" | "Doing" | "Done";
+  type TaskTimingFilterOption = "Current" | "Due" | "Overdue" | "Tomorrow" | "Future" | "Needs Timing";
+
+  const TRI_STATE_TASK_STATUS_OPTIONS: TaskStatusFilterOption[] = ["To Do", "Doing", "Done"];
+  const BINARY_TASK_STATUS_OPTIONS: TaskStatusFilterOption[] = ["To Do", "Done"];
+  const TASK_TIMING_OPTIONS: TaskTimingFilterOption[] = [
+    "Current",
+    "Due",
+    "Overdue",
+    "Tomorrow",
+    "Future",
+    "Needs Timing",
+  ];
+  const DEFAULT_TASK_TIMING_FILTER: TaskTimingFilterOption[] = [
+    "Current",
+    "Due",
+    "Overdue",
+    "Tomorrow",
+    "Needs Timing",
+  ];
+
+  const TASK_GRID_COLUMNS: TaskGridColumnConfig[] = [
+    { id: "done", label: "Done", sortField: "state", hideable: true },
+    { id: "task", label: "Task", sortField: "task", hideable: false },
+    { id: "project", label: "Project", sortField: "project", hideable: true },
+    { id: "requester", label: "Requester", sortField: "requester", hideable: true },
+    { id: "start", label: "Start", sortField: "start", hideable: true },
+    { id: "due", label: "Due", sortField: "due", hideable: true },
+    { id: "timing", label: "Timing Status", sortField: "timing", hideable: true },
+  ];
+
+  const TASK_DATE_TOKEN_REGEX = /(?:🛫|📅|✅)\s*\d{4}-\d{2}-\d{2}/gu;
+  const WIKI_LINK_REGEX = /\[\[([^\]]+)\]\]/gu;
+
+  interface CellSegment {
+    text: string;
+    linkReference: string | null;
+    target: string | null;
+  }
 
   let { viewStore, variant } = $props<{ viewStore: ProjectViewStore; variant: ViewVariant }>();
 
   const state = $derived.by(() => fromStore(viewStore.state).current);
 
   let expandedProjects = $state<Record<string, boolean>>({});
-  let showCompletedTasks = $state<Record<string, boolean>>({});
-  let showColumnPicker = $state(false);
-  let draggingVisibleColumnId = $state<string | null>(null);
+  let expandedParentProjects = $state<Record<string, boolean>>({});
+  let showStatusPicker = $state(false);
+  let showPriorityPicker = $state(false);
+  let showTaskStatusPicker = $state(false);
+  let showTaskTimingPicker = $state(false);
+  let projectsViewMode = $state<ProjectsViewMode>("project-task");
   let columnPickerOrder = $state<string[]>([]);
+  let taskColumnOrder = $state<string[]>(TASK_GRID_COLUMNS.map((column) => column.id));
+  let taskVisibleColumnIds = $state<string[]>(TASK_GRID_COLUMNS.map((column) => column.id));
+  let taskSortBy = $state<TaskSortField>("due");
+  let taskSortDirection = $state<SortDirection>("asc");
+  let statusPickerWrap = $state<HTMLDivElement | null>(null);
+  let priorityPickerWrap = $state<HTMLDivElement | null>(null);
+  let taskStatusPickerWrap = $state<HTMLDivElement | null>(null);
+  let taskTimingPickerWrap = $state<HTMLDivElement | null>(null);
+  let taskStatusFilter = $state<TaskStatusFilterOption[]>([]);
+  let taskTimingFilter = $state<TaskTimingFilterOption[]>([...DEFAULT_TASK_TIMING_FILTER]);
+  let taskStatusFilterInitialized = $state(false);
+  let lastTriStateSetting = $state<boolean | null>(null);
 
   const statusOptions = $derived.by(() => {
     const values = new Set(state.statuses);
@@ -27,6 +96,16 @@
     }
     return Array.from(values);
   });
+
+  const taskStatusOptions = $derived.by(() =>
+    state.triStateCheckboxes ? TRI_STATE_TASK_STATUS_OPTIONS : BINARY_TASK_STATUS_OPTIONS
+  );
+  const selectedTaskStatusSet = $derived.by(
+    () => new Set(taskStatusFilter.filter((status) => taskStatusOptions.includes(status)))
+  );
+  const selectedTaskTimingSet = $derived.by(
+    () => new Set(taskTimingFilter.filter((status) => TASK_TIMING_OPTIONS.includes(status)))
+  );
 
   const sortedTasksByProject = $derived.by(() => {
     const result = new Map<string, ProjectTask[]>();
@@ -48,7 +127,7 @@
     return result;
   });
 
-  const orderedPickerColumns = $derived.by(() => {
+  const orderedProjectPickerColumns = $derived.by(() => {
     const availableById = new Map(state.availableProjectGridColumns.map((column) => [column.id, column]));
     const orderedIds = columnPickerOrder.length > 0
       ? columnPickerOrder
@@ -64,6 +143,86 @@
       .filter((column): column is ProjectGridColumn => column !== undefined);
   });
 
+  const projectColumnPickerItems = $derived.by(() =>
+    orderedProjectPickerColumns.map((column) => ({
+      id: column.id,
+      label: column.label,
+      visible: isProjectColumnVisible(column.id),
+      hideable: column.id !== "project",
+    }))
+  );
+
+  const projectTableColumns = $derived.by(() =>
+    state.projectGridColumns.map((column) => ({
+      id: column.id,
+      label: column.label,
+      sortable: Boolean(column.sortField),
+      sortKey: column.sortField ?? "",
+    }))
+  );
+
+  const parentPathByProject = $derived.by(() => {
+    const result = new Map<string, string | null>();
+    const resolver = createParentResolver(state.projects);
+    for (const project of state.projects) {
+      result.set(project.path, resolver(project));
+    }
+    return result;
+  });
+
+  const childrenByParent = $derived.by(() => {
+    const result = new Map<string, ProjectNote[]>();
+    for (const project of state.projects) {
+      const parentPath = parentPathByProject.get(project.path) ?? null;
+      if (!parentPath || parentPath === project.path) {
+        continue;
+      }
+
+      if (!result.has(parentPath)) {
+        result.set(parentPath, []);
+      }
+      result.get(parentPath)?.push(project);
+    }
+    return result;
+  });
+
+  const rootProjects = $derived.by(() =>
+    state.projects.filter((project) => {
+      const parentPath = parentPathByProject.get(project.path) ?? null;
+      return !parentPath || !state.projects.some((candidate) => candidate.path === parentPath);
+    })
+  );
+
+  const orderedTaskColumns = $derived.by(() => {
+    const byId = new Map(TASK_GRID_COLUMNS.map((column) => [column.id, column]));
+    const order = taskColumnOrder.length > 0 ? taskColumnOrder : TASK_GRID_COLUMNS.map((column) => column.id);
+    return order
+      .map((id) => byId.get(id))
+      .filter((column): column is TaskGridColumnConfig => column !== undefined);
+  });
+
+  const visibleTaskColumns = $derived.by(() =>
+    orderedTaskColumns.filter((column) => taskVisibleColumnIds.includes(column.id))
+  );
+
+  const taskColumnPickerItems = $derived.by(() =>
+    orderedTaskColumns.map((column) => ({
+      id: column.id,
+      label: column.label,
+      visible: taskVisibleColumnIds.includes(column.id),
+      hideable: column.hideable !== false,
+    }))
+  );
+
+  const sortedTasks = $derived.by(() => {
+    const rows = state.tasks.filter((task) => shouldShowTaskInTasksView(task));
+    rows.sort((left, right) => {
+      const direction = taskSortDirection === "asc" ? 1 : -1;
+      return direction * compareTasks(left, right);
+    });
+    return rows;
+  });
+
   $effect(() => {
     const availableIds = state.availableProjectGridColumns.map((column) => column.id);
 
@@ -75,7 +234,6 @@
     const preserved = columnPickerOrder.filter((id) => availableIds.includes(id));
     const missing = availableIds.filter((id) => !preserved.includes(id));
     const nextOrder = [...preserved, ...missing];
-
     if (
       nextOrder.length !== columnPickerOrder.length ||
       nextOrder.some((id, index) => columnPickerOrder[index] !== id)
@@ -84,39 +242,210 @@
     }
   });
 
+  $effect(() => {
+    if (!showStatusPicker && !showPriorityPicker && !showTaskStatusPicker && !showTaskTimingPicker) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent): void => {
+      const target = event.target;
+      if (
+        isInside(target, statusPickerWrap) ||
+        isInside(target, priorityPickerWrap) ||
+        isInside(target, taskStatusPickerWrap) ||
+        isInside(target, taskTimingPickerWrap)
+      ) {
+        return;
+      }
+
+      closeFilterPickers();
+    };
+
+    const handleEscape = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        closeFilterPickers();
+      }
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown, true);
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown, true);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  });
+
+  $effect(() => {
+    const currentTriState = state.triStateCheckboxes;
+    const options = taskStatusOptions;
+
+    if (!taskStatusFilterInitialized) {
+      taskStatusFilter = currentTriState ? ["To Do", "Doing"] : ["To Do"];
+      taskStatusFilterInitialized = true;
+      lastTriStateSetting = currentTriState;
+      return;
+    }
+
+    let next = taskStatusFilter.filter((status) => options.includes(status));
+    const triStateJustEnabled = lastTriStateSetting === false && currentTriState;
+    if (
+      triStateJustEnabled &&
+      next.length === 1 &&
+      next[0] === "To Do"
+    ) {
+      next = ["To Do", "Doing"];
+    }
+
+    if (next.length === 0 && taskStatusFilter.length > 0) {
+      next = [options[0]];
+    }
+
+    if (next.length !== taskStatusFilter.length || next.some((value, index) => taskStatusFilter[index] !== value)) {
+      taskStatusFilter = next;
+    }
+
+    lastTriStateSetting = currentTriState;
+  });
+
+  function closeFilterPickers(): void {
+    showStatusPicker = false;
+    showPriorityPicker = false;
+    showTaskStatusPicker = false;
+    showTaskTimingPicker = false;
+  }
+
+  function isInside(target: EventTarget | null, container: HTMLElement | null): boolean {
+    return target instanceof Node && container?.contains(target) === true;
+  }
+
   function toggleExpand(path: string): void {
     expandedProjects[path] = !expandedProjects[path];
   }
 
-  function toggleCompleted(path: string): void {
-    showCompletedTasks[path] = !showCompletedTasks[path];
+  function toggleParentChildren(path: string): void {
+    expandedParentProjects[path] = !expandedParentProjects[path];
   }
 
-  function shouldShowTask(path: string, task: ProjectTask): boolean {
-    if (!task.checked) {
+  function hasChildProjects(path: string): boolean {
+    return (childrenByParent.get(path)?.length ?? 0) > 0;
+  }
+
+  function taskStatusForTask(task: ProjectTask): TaskStatusFilterOption {
+    if (task.state === "checked") {
+      return "Done";
+    }
+
+    if (task.state === "in-progress") {
+      return state.triStateCheckboxes ? "Doing" : "To Do";
+    }
+
+    return "To Do";
+  }
+
+  function localIsoDate(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function relativeLocalIsoDate(daysFromToday: number): string {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() + daysFromToday);
+    return localIsoDate(date);
+  }
+
+  function isTerminalProjectStatus(status: string | undefined): boolean {
+    const normalized = (status ?? "").trim().toLowerCase();
+    return normalized === "done" || normalized === "cancelled" || normalized === "canceled";
+  }
+
+  function taskTimingStatuses(task: ProjectTask): TaskTimingFilterOption[] {
+    const timing: TaskTimingFilterOption[] = [];
+    const today = relativeLocalIsoDate(0);
+    const tomorrow = relativeLocalIsoDate(1);
+    const projectStatus = state.projectStatusByPath[task.projectPath];
+
+    if (
+      !task.checked &&
+      !isTerminalProjectStatus(projectStatus) &&
+      task.startDate &&
+      task.dueDate &&
+      task.startDate <= today &&
+      today <= task.dueDate
+    ) {
+      timing.push("Current");
+    }
+
+    if (task.dueDate === today) {
+      timing.push("Due");
+    }
+
+    if (task.dueDate && today > task.dueDate) {
+      timing.push("Overdue");
+    }
+
+    if (task.startDate === tomorrow) {
+      timing.push("Tomorrow");
+    }
+
+    if (task.startDate && task.startDate > tomorrow) {
+      timing.push("Future");
+    }
+
+    if (!task.startDate && !task.dueDate) {
+      timing.push("Needs Timing");
+    }
+
+    return timing;
+  }
+
+  function shouldShowTask(task: ProjectTask): boolean {
+    return selectedTaskStatusSet.has(taskStatusForTask(task));
+  }
+
+  function shouldShowTaskInTasksView(task: ProjectTask): boolean {
+    if (!shouldShowTask(task)) {
+      return false;
+    }
+
+    if (allTaskTimingSelected()) {
       return true;
     }
 
-    return showCompletedTasks[path] ?? false;
+    const timing = taskTimingStatuses(task);
+    if (timing.length === 0) {
+      return false;
+    }
+
+    return timing.some((status) => selectedTaskTimings().has(status));
   }
 
-  function sortByColumn(field: ProjectSortField): void {
+  function sortByProjectColumn(field: ProjectSortField): void {
     const nextDirection = state.sortBy === field && state.sortDirection === "asc" ? "desc" : "asc";
     viewStore.setSort(field, nextDirection);
   }
 
-  function sortMarker(field: ProjectSortField): string {
-    if (state.sortBy !== field) {
-      return "";
-    }
-    return state.sortDirection === "asc" ? "↑" : "↓";
+  function handleProjectSort(sortKey: string): void {
+    sortByProjectColumn(sortKey as ProjectSortField);
   }
 
-  function headerSortState(field: ProjectSortField): "ascending" | "descending" | "none" {
-    if (state.sortBy !== field) {
-      return "none";
-    }
-    return state.sortDirection === "asc" ? "ascending" : "descending";
+  function sortByTaskColumn(field: TaskSortField): void {
+    const nextDirection: SortDirection =
+      taskSortBy === field && taskSortDirection === "asc" ? "desc" : "asc";
+    taskSortBy = field;
+    taskSortDirection = nextDirection;
+  }
+
+  function handleTaskSort(sortKey: string): void {
+    sortByTaskColumn(sortKey as TaskSortField);
+  }
+
+  function handleProjectsViewModeChange(event: Event): void {
+    const value = (event.currentTarget as HTMLSelectElement).value;
+    projectsViewMode = value === "parent-child" ? "parent-child" : "project-task";
   }
 
   function checkboxVisualState(node: HTMLInputElement, taskState: TaskState): { update: (nextState: TaskState) => void } {
@@ -166,80 +495,296 @@
     void viewStore.setTaskState(task.id, nextState);
   }
 
-  function handleSortHeaderKeydown(event: KeyboardEvent, field: ProjectSortField): void {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      sortByColumn(field);
+  function toggleStatusPicker(): void {
+    showStatusPicker = !showStatusPicker;
+    if (showStatusPicker) {
+      showPriorityPicker = false;
+      showTaskStatusPicker = false;
+      showTaskTimingPicker = false;
     }
   }
 
-  function toggleColumnPicker(): void {
-    showColumnPicker = !showColumnPicker;
+  function togglePriorityPicker(): void {
+    showPriorityPicker = !showPriorityPicker;
+    if (showPriorityPicker) {
+      showStatusPicker = false;
+      showTaskStatusPicker = false;
+      showTaskTimingPicker = false;
+    }
   }
 
-  function isColumnVisible(columnId: string): boolean {
+  function toggleTaskStatusPicker(): void {
+    showTaskStatusPicker = !showTaskStatusPicker;
+    if (showTaskStatusPicker) {
+      showStatusPicker = false;
+      showPriorityPicker = false;
+      showTaskTimingPicker = false;
+    }
+  }
+
+  function toggleTaskTimingPicker(): void {
+    showTaskTimingPicker = !showTaskTimingPicker;
+    if (showTaskTimingPicker) {
+      showStatusPicker = false;
+      showPriorityPicker = false;
+      showTaskStatusPicker = false;
+    }
+  }
+
+  function allStatusesSelected(): boolean {
+    return selectedStatuses().size === statusOptions.length && statusOptions.length > 0;
+  }
+
+  function allPrioritiesSelected(): boolean {
+    return selectedPriorities().size === state.priorities.length && state.priorities.length > 0;
+  }
+
+  function statusButtonLabel(): string {
+    const selectedCount = selectedStatuses().size;
+    if (selectedCount === 0) {
+      return "Status: None";
+    }
+
+    if (allStatusesSelected()) {
+      return "Status: All";
+    }
+
+    return `Status: ${selectedCount}`;
+  }
+
+  function priorityButtonLabel(): string {
+    const selectedCount = selectedPriorities().size;
+    if (selectedCount === 0) {
+      return "Priority: None";
+    }
+
+    if (allPrioritiesSelected()) {
+      return "Priority: All";
+    }
+
+    return `Priority: ${selectedCount}`;
+  }
+
+  function allTaskStatusesSelected(): boolean {
+    return selectedTaskStatuses().size === taskStatusOptions.length && taskStatusOptions.length > 0;
+  }
+
+  function taskStatusButtonLabel(): string {
+    const selectedCount = selectedTaskStatuses().size;
+    if (selectedCount === 0) {
+      return "Task Status: None";
+    }
+
+    if (allTaskStatusesSelected()) {
+      return "Task Status: All";
+    }
+
+    return `Task Status: ${selectedCount}`;
+  }
+
+  function allTaskTimingSelected(): boolean {
+    return selectedTaskTimings().size === TASK_TIMING_OPTIONS.length && TASK_TIMING_OPTIONS.length > 0;
+  }
+
+  function taskTimingButtonLabel(): string {
+    const selectedCount = selectedTaskTimings().size;
+    if (selectedCount === 0) {
+      return "Timing Status: None";
+    }
+
+    if (allTaskTimingSelected()) {
+      return "Timing Status: All";
+    }
+
+    return `Timing Status: ${selectedCount}`;
+  }
+
+  function selectedStatuses(): Set<string> {
+    return new Set(state.statusFilter.filter((status) => statusOptions.includes(status)));
+  }
+
+  function selectedPriorities(): Set<string> {
+    return new Set(state.priorityFilter.filter((priority) => state.priorities.includes(priority)));
+  }
+
+  function selectedTaskStatuses(): Set<TaskStatusFilterOption> {
+    return selectedTaskStatusSet;
+  }
+
+  function selectedTaskTimings(): Set<TaskTimingFilterOption> {
+    return selectedTaskTimingSet;
+  }
+
+  function handleStatusSelectAll(): void {
+    viewStore.setStatusFilter(statusOptions);
+  }
+
+  function handleStatusSelectNone(): void {
+    viewStore.setStatusFilter([FILTER_NONE_TOKEN]);
+  }
+
+  function handlePrioritySelectAll(): void {
+    viewStore.setPriorityFilter(state.priorities);
+  }
+
+  function handlePrioritySelectNone(): void {
+    viewStore.setPriorityFilter([FILTER_NONE_TOKEN]);
+  }
+
+  function handleTaskStatusSelectAll(): void {
+    taskStatusFilter = [...taskStatusOptions];
+  }
+
+  function handleTaskStatusSelectNone(): void {
+    taskStatusFilter = [];
+  }
+
+  function handleTaskTimingSelectAll(): void {
+    taskTimingFilter = [...TASK_TIMING_OPTIONS];
+  }
+
+  function handleTaskTimingSelectNone(): void {
+    taskTimingFilter = [];
+  }
+
+  function handleStatusOptionChange(status: string, event: Event): void {
+    const checked = (event.currentTarget as HTMLInputElement).checked;
+    const next = selectedStatuses();
+    if (checked) {
+      next.add(status);
+    } else {
+      next.delete(status);
+    }
+    viewStore.setStatusFilter(next.size > 0 ? Array.from(next) : [FILTER_NONE_TOKEN]);
+  }
+
+  function handlePriorityOptionChange(priority: string, event: Event): void {
+    const checked = (event.currentTarget as HTMLInputElement).checked;
+    const next = selectedPriorities();
+    if (checked) {
+      next.add(priority);
+    } else {
+      next.delete(priority);
+    }
+    viewStore.setPriorityFilter(next.size > 0 ? Array.from(next) : [FILTER_NONE_TOKEN]);
+  }
+
+  function handleTaskStatusOptionChange(taskStatus: TaskStatusFilterOption, event: Event): void {
+    const checked = (event.currentTarget as HTMLInputElement).checked;
+    const next = new Set(selectedTaskStatuses());
+    if (checked) {
+      next.add(taskStatus);
+    } else {
+      next.delete(taskStatus);
+    }
+
+    const normalized = taskStatusOptions.filter((status) => next.has(status));
+    taskStatusFilter = normalized;
+  }
+
+  function handleTaskTimingOptionChange(taskTiming: TaskTimingFilterOption, event: Event): void {
+    const checked = (event.currentTarget as HTMLInputElement).checked;
+    const next = new Set(selectedTaskTimings());
+    if (checked) {
+      next.add(taskTiming);
+    } else {
+      next.delete(taskTiming);
+    }
+
+    const normalized = TASK_TIMING_OPTIONS.filter((status) => next.has(status));
+    taskTimingFilter = normalized;
+  }
+
+  function isProjectColumnVisible(columnId: string): boolean {
     return state.projectGridColumns.some((column) => column.id === columnId);
   }
 
-  function setColumnVisibility(columnId: string, checked: boolean): void {
-    const visible = new Set(state.projectGridColumns.map((column) => column.id));
-    if (checked) {
-      visible.add(columnId);
+  function handleProjectColumnVisibility(columnId: string, visible: boolean): void {
+    const visibleIds = new Set(state.projectGridColumns.map((column) => column.id));
+    if (visible) {
+      visibleIds.add(columnId);
     } else {
-      visible.delete(columnId);
+      visibleIds.delete(columnId);
     }
 
-    const nextVisibleIds = columnPickerOrder.filter((id) => visible.has(id));
+    const nextVisibleIds = columnPickerOrder.filter((id) => visibleIds.has(id));
     void viewStore.setProjectGridColumns(nextVisibleIds);
   }
 
-  function handleColumnVisibilityChange(columnId: string, event: Event): void {
-    const checked = (event.currentTarget as HTMLInputElement).checked;
-    setColumnVisibility(columnId, checked);
-  }
-
-  function handleVisibleColumnDragStart(event: DragEvent, columnId: string): void {
-    draggingVisibleColumnId = columnId;
-    if (event.dataTransfer) {
-      event.dataTransfer.setData("text/plain", columnId);
-      event.dataTransfer.effectAllowed = "move";
-    }
-  }
-
-  function handleVisibleColumnDragOver(event: DragEvent): void {
-    event.preventDefault();
-    if (event.dataTransfer) {
-      event.dataTransfer.dropEffect = "move";
-    }
-  }
-
-  function handleVisibleColumnDrop(event: DragEvent, targetColumnId: string): void {
-    event.preventDefault();
-    const sourceColumnId = event.dataTransfer?.getData("text/plain") || draggingVisibleColumnId;
-    draggingVisibleColumnId = null;
-    if (!sourceColumnId || sourceColumnId === targetColumnId) {
-      return;
-    }
-
-    const currentIds = [...columnPickerOrder];
-    const sourceIndex = currentIds.indexOf(sourceColumnId);
-    const targetIndex = currentIds.indexOf(targetColumnId);
-    if (sourceIndex < 0 || targetIndex < 0) {
-      return;
-    }
-
-    const nextIds = [...currentIds];
-    const [moved] = nextIds.splice(sourceIndex, 1);
-    nextIds.splice(targetIndex, 0, moved);
-    columnPickerOrder = nextIds;
-
-    const visible = new Set(state.projectGridColumns.map((column) => column.id));
-    const nextVisibleIds = nextIds.filter((id) => visible.has(id));
+  function handleProjectColumnOrder(nextOrder: string[]): void {
+    columnPickerOrder = [...nextOrder];
+    const visibleIds = new Set(state.projectGridColumns.map((column) => column.id));
+    const nextVisibleIds = nextOrder.filter((id) => visibleIds.has(id));
     void viewStore.setProjectGridColumns(nextVisibleIds);
   }
 
-  function handleVisibleColumnDragEnd(): void {
-    draggingVisibleColumnId = null;
+  function handleTaskColumnVisibility(columnId: string, visible: boolean): void {
+    const current = new Set(taskVisibleColumnIds);
+    if (visible) {
+      current.add(columnId);
+    } else {
+      current.delete(columnId);
+    }
+
+    const next = taskColumnOrder.filter((id) => current.has(id));
+    taskVisibleColumnIds = next.length > 0 ? next : ["task"];
+  }
+
+  function handleTaskColumnOrder(nextOrder: string[]): void {
+    taskColumnOrder = [...nextOrder];
+    const visibleIds = new Set(taskVisibleColumnIds);
+    taskVisibleColumnIds = nextOrder.filter((id) => visibleIds.has(id));
+  }
+
+  function compareTasks(left: ProjectTask, right: ProjectTask): number {
+    switch (taskSortBy) {
+      case "state":
+        return compareTaskState(left, right);
+      case "task":
+        return compareText(getTaskDisplayText(left), getTaskDisplayText(right));
+      case "project":
+        return compareText(left.projectName, right.projectName);
+      case "requester":
+        return compareText((left.projectRequester ?? []).join(", "), (right.projectRequester ?? []).join(", "));
+      case "start":
+        return compareNullableDate(left.startDate, right.startDate);
+      case "timing":
+        return compareText(timingSortValue(left), timingSortValue(right));
+      case "due":
+      default:
+        return compareNullableDate(left.dueDate, right.dueDate);
+    }
+  }
+
+  function timingSortValue(task: ProjectTask): string {
+    return taskTimingStatuses(task).join("|");
+  }
+
+  function compareText(left: string, right: string): number {
+    return left.localeCompare(right, undefined, { sensitivity: "base" });
+  }
+
+  function compareNullableDate(left: string | null, right: string | null): number {
+    if (left && right) {
+      return left.localeCompare(right);
+    }
+    if (left) {
+      return -1;
+    }
+    if (right) {
+      return 1;
+    }
+    return 0;
+  }
+
+  function compareTaskState(left: ProjectTask, right: ProjectTask): number {
+    const order: Record<TaskState, number> = {
+      unchecked: 0,
+      "in-progress": 1,
+      checked: 2,
+    };
+
+    return order[left.state] - order[right.state];
   }
 
   function handleStatusChange(project: ProjectNote, event: Event): void {
@@ -260,9 +805,113 @@
     });
   }
 
+  function badgeToken(value: string): string {
+    return value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  }
+
+  function statusBadgeClass(status: string): string {
+    const token = badgeToken(status);
+    return token.length > 0 ? `opn-status-${token}` : "opn-status-default";
+  }
+
+  function priorityBadgeClass(priority: string): string {
+    const token = badgeToken(priority);
+    return token.length > 0 ? `opn-priority-${token}` : "opn-priority-default";
+  }
+
   function handleProjectLinkClick(event: MouseEvent, path: string): void {
     event.preventDefault();
     void viewStore.openProject(path);
+  }
+
+  function parseWikiLink(value: string): { target: string; label: string; reference: string } | null {
+    const trimmed = value.trim();
+    const match = trimmed.match(/^\[\[([^\]]+)\]\]$/u);
+    if (!match) {
+      return null;
+    }
+
+    const inner = match[1];
+    const [targetRaw = "", aliasRaw = ""] = inner.split("|", 2);
+    const target = (targetRaw.split("#", 1)[0] ?? "").trim();
+    if (target.length === 0) {
+      return null;
+    }
+
+    const alias = aliasRaw.trim();
+    return {
+      target,
+      label: alias.length > 0 ? alias : target,
+      reference: `[[${inner}]]`,
+    };
+  }
+
+  function parseCellSegments(value: string): CellSegment[] {
+    const segments: CellSegment[] = [];
+    let cursor = 0;
+
+    WIKI_LINK_REGEX.lastIndex = 0;
+    for (const match of value.matchAll(WIKI_LINK_REGEX)) {
+      const start = match.index ?? 0;
+      const full = match[0];
+      const end = start + full.length;
+
+      if (start > cursor) {
+        segments.push({
+          text: value.slice(cursor, start),
+          linkReference: null,
+          target: null,
+        });
+      }
+
+      const parsed = parseWikiLink(full);
+      if (parsed) {
+        segments.push({
+          text: parsed.label,
+          linkReference: parsed.reference,
+          target: parsed.target,
+        });
+      } else {
+        segments.push({
+          text: full,
+          linkReference: null,
+          target: null,
+        });
+      }
+
+      cursor = end;
+    }
+
+    if (cursor < value.length) {
+      segments.push({
+        text: value.slice(cursor),
+        linkReference: null,
+        target: null,
+      });
+    }
+
+    if (segments.length === 0) {
+      segments.push({
+        text: value,
+        linkReference: null,
+        target: null,
+      });
+    }
+
+    return segments;
+  }
+
+  function handleCellLinkClick(event: MouseEvent, linkReference: string, sourcePath: string): void {
+    event.preventDefault();
+    void viewStore.openProjectLink(linkReference, sourcePath);
+  }
+
+  function handleTaskLinkClick(event: MouseEvent, task: ProjectTask): void {
+    event.preventDefault();
+    void viewStore.openProjectTask(task.projectPath, task.line);
   }
 
   function customPropertyValue(project: ProjectNote, column: ProjectGridColumn): string {
@@ -274,199 +923,301 @@
     return project.customProperties?.[key] ?? "";
   }
 
-  const TASK_DATE_TOKEN_REGEX = /(?:🛫|📅|✅)\s*\d{4}-\d{2}-\d{2}/gu;
-
   function getTaskDisplayText(task: ProjectTask): string {
     const displayText = task.text.replace(TASK_DATE_TOKEN_REGEX, "").replace(/\s{2,}/g, " ").trim();
     return displayText.length > 0 ? displayText : task.text;
+  }
+
+  function normalizeProjectReference(value: string): string {
+    return value.trim().replace(/\.md$/iu, "").toLowerCase();
+  }
+
+  function createParentResolver(projects: ProjectNote[]): (project: ProjectNote) => string | null {
+    const pathByReference = new Map<string, string>();
+    for (const project of projects) {
+      const pathWithoutExt = project.path.replace(/\.md$/iu, "");
+      const fileName = pathWithoutExt.split("/").pop() ?? pathWithoutExt;
+      const refs = new Set<string>([
+        pathWithoutExt,
+        fileName,
+        project.title,
+        project.displayName,
+        ...project.aliases,
+      ]);
+
+      for (const ref of refs) {
+        const normalized = normalizeProjectReference(ref);
+        if (!normalized || pathByReference.has(normalized)) {
+          continue;
+        }
+        pathByReference.set(normalized, project.path);
+      }
+    }
+
+    return (project: ProjectNote): string | null => {
+      const rawParent = project.parentProject?.trim();
+      if (!rawParent) {
+        return null;
+      }
+
+      const parsed = parseWikiLink(rawParent);
+      const candidateTarget = parsed ? parsed.target : rawParent;
+      const normalizedTarget = normalizeProjectReference(candidateTarget);
+      if (!normalizedTarget) {
+        return null;
+      }
+
+      return pathByReference.get(normalizedTarget) ?? null;
+    };
   }
 </script>
 
 <div class={`opn-grid opn-${variant}`}>
   <section class="opn-grid-controls" aria-label="Grid controls">
-    <div class="opn-grid-tabs" role="tablist" aria-label="Grid tabs">
-      <button
-        type="button"
-        role="tab"
-        aria-selected={state.gridTab === "projects"}
-        class:active={state.gridTab === "projects"}
-        onclick={() => viewStore.setGridTab("projects")}
-      >
-        Projects
-      </button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={state.gridTab === "tasks"}
-        class:active={state.gridTab === "tasks"}
-        onclick={() => viewStore.setGridTab("tasks")}
-      >
-        Tasks
-      </button>
-    </div>
-
     {#if state.gridTab === "projects"}
-      <div class="opn-grid-filter-row">
-        <label>
-          Search all columns
-          <input
-            aria-label="Search all project columns"
-            type="text"
+      <div class="opn-grid-filter-row opn-projects-controls">
+        <div class="opn-grid-filter-left">
+          <SearchInput
+            ariaLabel="Search projects"
+            placeholder="Search Projects"
             value={state.projectSearch}
-            oninput={(event) => viewStore.setProjectSearch((event.currentTarget as HTMLInputElement).value)}
+            onChange={(value) => viewStore.setProjectSearch(value)}
           />
-        </label>
 
-        <div class="opn-column-picker-wrap">
-          <button
-            type="button"
-            class="secondary"
-            aria-haspopup="dialog"
-            aria-expanded={showColumnPicker}
-            onclick={toggleColumnPicker}
-          >
-            Columns
-          </button>
+          <ColumnPicker
+            label="Columns"
+            items={projectColumnPickerItems}
+            onToggle={handleProjectColumnVisibility}
+            onReorder={handleProjectColumnOrder}
+          />
 
-          {#if showColumnPicker}
-            <div class="opn-column-picker" role="dialog" aria-label="Project grid column settings">
-              <section>
-                <strong>Columns</strong>
-                <ul class="opn-column-order-list">
-                  {#each orderedPickerColumns as column (column.id)}
-                    <li
-                      draggable={column.id !== "project"}
-                      class:dragging={draggingVisibleColumnId === column.id}
-                      ondragstart={(event) => handleVisibleColumnDragStart(event, column.id)}
-                      ondragover={handleVisibleColumnDragOver}
-                      ondrop={(event) => handleVisibleColumnDrop(event, column.id)}
-                      ondragend={handleVisibleColumnDragEnd}
-                    >
-                      <span class="opn-column-drag-handle" aria-hidden="true">{column.id === "project" ? "•" : "⋮⋮"}</span>
-                      <span class="opn-column-name">{column.label}</span>
-                      <input
-                        type="checkbox"
-                        checked={isColumnVisible(column.id)}
-                        class="opn-column-visibility-toggle"
-                        disabled={column.id === "project"}
-                        onchange={(event) => handleColumnVisibilityChange(column.id, event)}
-                      />
-                    </li>
-                  {/each}
-                </ul>
-              </section>
-            </div>
-          {/if}
-        </div>
-      </div>
-
-      <div class="opn-filter-groups">
-        <div class="opn-filter-group" aria-label="Status filters">
-          <span>Status</span>
-          <button type="button" class="secondary" onclick={() => viewStore.clearStatusFilter()}>
-            Clear
-          </button>
-          {#each statusOptions as status (status)}
-            <label>
-              <input
-                type="checkbox"
-                checked={state.statusFilter.includes(status)}
-                onchange={() => viewStore.toggleStatusFilter(status)}
-              />
-              {status}
-            </label>
-          {/each}
-        </div>
-
-        <div class="opn-filter-group" aria-label="Priority filters">
-          <span>Priority</span>
-          <button type="button" class="secondary" onclick={() => viewStore.clearPriorityFilter()}>
-            Clear
-          </button>
-          {#each state.priorities as priority (priority)}
-            <label>
-              <input
-                type="checkbox"
-                checked={state.priorityFilter.includes(priority)}
-                onchange={() => viewStore.togglePriorityFilter(priority)}
-              />
-              {priority}
-            </label>
-          {/each}
-        </div>
-
-        {#if state.availableAreaTags.length > 0}
-          <div class="opn-filter-group" aria-label="Area tag filters">
-            <span>Area Tags</span>
-            <button type="button" class="secondary" onclick={() => viewStore.clearAreaTagFilter()}>
-              Clear
+          <div class="opn-multiselect-wrap" bind:this={statusPickerWrap}>
+            <button
+              type="button"
+              class="secondary"
+              aria-haspopup="dialog"
+              aria-expanded={showStatusPicker}
+              onclick={toggleStatusPicker}
+            >
+              {statusButtonLabel()}
             </button>
-            {#each state.availableAreaTags as tag (tag)}
-              <label>
-                <input
-                  type="checkbox"
-                  checked={state.areaTagFilter.includes(tag)}
-                  onchange={() => viewStore.toggleAreaTagFilter(tag)}
-                />
-                {tag}
-              </label>
-            {/each}
+
+            {#if showStatusPicker}
+              <div class="opn-multiselect-menu" role="dialog" aria-label="Status filter options">
+                <div class="opn-multiselect-actions">
+                  <button type="button" class="secondary opn-multiselect-action" onclick={handleStatusSelectAll}>
+                    All
+                  </button>
+                  <button type="button" class="secondary opn-multiselect-action" onclick={handleStatusSelectNone}>
+                    None
+                  </button>
+                </div>
+                {#each statusOptions as status (status)}
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={selectedStatuses().has(status)}
+                      onchange={(event) => handleStatusOptionChange(status, event)}
+                    />
+                    {status}
+                  </label>
+                {/each}
+              </div>
+            {/if}
           </div>
-        {/if}
+
+          <div class="opn-multiselect-wrap" bind:this={priorityPickerWrap}>
+            <button
+              type="button"
+              class="secondary"
+              aria-haspopup="dialog"
+              aria-expanded={showPriorityPicker}
+              onclick={togglePriorityPicker}
+            >
+              {priorityButtonLabel()}
+            </button>
+
+            {#if showPriorityPicker}
+              <div class="opn-multiselect-menu" role="dialog" aria-label="Priority filter options">
+                <div class="opn-multiselect-actions">
+                  <button type="button" class="secondary opn-multiselect-action" onclick={handlePrioritySelectAll}>
+                    All
+                  </button>
+                  <button type="button" class="secondary opn-multiselect-action" onclick={handlePrioritySelectNone}>
+                    None
+                  </button>
+                </div>
+                {#each state.priorities as priority (priority)}
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={selectedPriorities().has(priority)}
+                      onchange={(event) => handlePriorityOptionChange(priority, event)}
+                    />
+                    {priority}
+                  </label>
+                {/each}
+              </div>
+            {/if}
+          </div>
+
+          <label class="opn-inline-select">
+            <span>View</span>
+            <select value={projectsViewMode} onchange={handleProjectsViewModeChange}>
+              <option value="project-task">Project-Task</option>
+              <option value="parent-child">Parent-Child</option>
+            </select>
+          </label>
+
+          <div class="opn-multiselect-wrap" bind:this={taskStatusPickerWrap}>
+            <button
+              type="button"
+              class="secondary"
+              aria-haspopup="dialog"
+              aria-expanded={showTaskStatusPicker}
+              onclick={toggleTaskStatusPicker}
+            >
+              {taskStatusButtonLabel()}
+            </button>
+
+            {#if showTaskStatusPicker}
+              <div class="opn-multiselect-menu" role="dialog" aria-label="Task status filter options">
+                <div class="opn-multiselect-actions">
+                  <button type="button" class="secondary opn-multiselect-action" onclick={handleTaskStatusSelectAll}>
+                    All
+                  </button>
+                  <button type="button" class="secondary opn-multiselect-action" onclick={handleTaskStatusSelectNone}>
+                    None
+                  </button>
+                </div>
+                {#each taskStatusOptions as taskStatus (taskStatus)}
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={selectedTaskStatuses().has(taskStatus)}
+                      onchange={(event) => handleTaskStatusOptionChange(taskStatus, event)}
+                    />
+                    {taskStatus}
+                  </label>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        </div>
+
+        <div class="opn-grid-filter-right">
+          <button type="button" class="mod-cta" onclick={() => void viewStore.createProjectNote()}>
+            Add Project
+          </button>
+        </div>
       </div>
     {:else}
-      <div class="opn-grid-filter-row">
-        <label>
-          Search tasks
-          <input
-            aria-label="Search tasks"
-            type="text"
+      <div class="opn-grid-filter-row opn-projects-controls">
+        <div class="opn-grid-filter-left">
+          <SearchInput
+            ariaLabel="Search tasks"
+            placeholder="Search Tasks"
             value={state.taskSearch}
-            oninput={(event) => viewStore.setTaskSearch((event.currentTarget as HTMLInputElement).value)}
+            onChange={(value) => viewStore.setTaskSearch(value)}
           />
-        </label>
 
-        <button type="button" class="mod-cta" onclick={() => void viewStore.createTaskInCurrentArea()}>
-          Add Task
-        </button>
+          <ColumnPicker
+            label="Columns"
+            items={taskColumnPickerItems}
+            onToggle={handleTaskColumnVisibility}
+            onReorder={handleTaskColumnOrder}
+          />
 
-        <button
-          type="button"
-          class="secondary"
-          onclick={() => viewStore.toggleTaskViewCompletedVisibility()}
-        >
-          {state.showCompletedTasksInTaskView ? "Hide completed" : "Show completed"}
-        </button>
+          <div class="opn-multiselect-wrap" bind:this={taskStatusPickerWrap}>
+            <button
+              type="button"
+              class="secondary"
+              aria-haspopup="dialog"
+              aria-expanded={showTaskStatusPicker}
+              onclick={toggleTaskStatusPicker}
+            >
+              {taskStatusButtonLabel()}
+            </button>
+
+            {#if showTaskStatusPicker}
+              <div class="opn-multiselect-menu" role="dialog" aria-label="Task status filter options">
+                <div class="opn-multiselect-actions">
+                  <button type="button" class="secondary opn-multiselect-action" onclick={handleTaskStatusSelectAll}>
+                    All
+                  </button>
+                  <button type="button" class="secondary opn-multiselect-action" onclick={handleTaskStatusSelectNone}>
+                    None
+                  </button>
+                </div>
+                {#each taskStatusOptions as taskStatus (taskStatus)}
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={selectedTaskStatuses().has(taskStatus)}
+                      onchange={(event) => handleTaskStatusOptionChange(taskStatus, event)}
+                    />
+                    {taskStatus}
+                  </label>
+                {/each}
+              </div>
+            {/if}
+          </div>
+
+          <div class="opn-multiselect-wrap" bind:this={taskTimingPickerWrap}>
+            <button
+              type="button"
+              class="secondary"
+              aria-haspopup="dialog"
+              aria-expanded={showTaskTimingPicker}
+              onclick={toggleTaskTimingPicker}
+            >
+              {taskTimingButtonLabel()}
+            </button>
+
+            {#if showTaskTimingPicker}
+              <div class="opn-multiselect-menu" role="dialog" aria-label="Timing status filter options">
+                <div class="opn-multiselect-actions">
+                  <button type="button" class="secondary opn-multiselect-action" onclick={handleTaskTimingSelectAll}>
+                    All
+                  </button>
+                  <button type="button" class="secondary opn-multiselect-action" onclick={handleTaskTimingSelectNone}>
+                    None
+                  </button>
+                </div>
+                {#each TASK_TIMING_OPTIONS as taskTiming (taskTiming)}
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={selectedTaskTimings().has(taskTiming)}
+                      onchange={(event) => handleTaskTimingOptionChange(taskTiming, event)}
+                    />
+                    {taskTiming}
+                  </label>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        </div>
+
+        <div class="opn-grid-filter-right">
+          <button type="button" class="mod-cta" onclick={() => void viewStore.createTaskInCurrentArea()}>
+            Add Task
+          </button>
+        </div>
       </div>
     {/if}
   </section>
 
   {#if state.gridTab === "projects"}
-    <table class="opn-table" aria-label="Projects grid">
-      <thead>
-        <tr>
-          <th></th>
-          {#each state.projectGridColumns as column (column.id)}
-            <th aria-sort={column.sortField ? headerSortState(column.sortField) : undefined}>
-              {#if column.sortField}
-                <span
-                  class="opn-sort-header"
-                  role="button"
-                  tabindex="0"
-                  onclick={() => sortByColumn(column.sortField)}
-                  onkeydown={(event) => handleSortHeaderKeydown(event, column.sortField)}
-                >
-                  <span>{column.label}</span>
-                  <span class="opn-sort-marker">{sortMarker(column.sortField)}</span>
-                </span>
-              {:else}
-                <span>{column.label}</span>
-              {/if}
-            </th>
-          {/each}
-        </tr>
-      </thead>
-      <tbody>
+    <GridTable
+      ariaLabel="Projects grid"
+      columns={projectTableColumns}
+      sortBy={state.sortBy}
+      sortDirection={state.sortDirection}
+      onSort={handleProjectSort}
+      showLeadingColumn={true}
+    >
+      {#if projectsViewMode === "project-task"}
         {#each state.projects as project (project.path)}
           <tr>
             <td>
@@ -493,13 +1244,21 @@
                     {project.displayName}
                   </a>
                 {:else if column.id === "status"}
-                  <select value={project.status} onchange={(event) => handleStatusChange(project, event)}>
+                  <select
+                    value={project.status}
+                    class={`opn-badge-select opn-status-badge ${statusBadgeClass(project.status)}`}
+                    onchange={(event) => handleStatusChange(project, event)}
+                  >
                     {#each statusOptions as status (status)}
                       <option value={status}>{status}</option>
                     {/each}
                   </select>
                 {:else if column.id === "priority"}
-                  <select value={project.priority} onchange={(event) => handlePriorityChange(project, event)}>
+                  <select
+                    value={project.priority}
+                    class={`opn-badge-select opn-priority-badge ${priorityBadgeClass(project.priority)}`}
+                    onchange={(event) => handlePriorityChange(project, event)}
+                  >
                     {#each state.priorities as priority (priority)}
                       <option value={priority}>{priority}</option>
                     {/each}
@@ -513,11 +1272,64 @@
                 {:else if column.id === "tags"}
                   {project.tags.join(", ")}
                 {:else if column.id === "parent-project"}
-                  {project.parentProject ?? ""}
+                  {#if project.parentProject}
+                    {#each parseCellSegments(project.parentProject) as segment, index (`${project.path}:parent:${index}`)}
+                      {#if segment.linkReference}
+                        <a
+                          href={encodeURI(segment.target ?? "")}
+                          class="opn-link"
+                          aria-label={`Open parent project ${segment.text}`}
+                          onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", project.path)}
+                        >
+                          {segment.text}
+                        </a>
+                      {:else}
+                        {segment.text}
+                      {/if}
+                    {/each}
+                  {:else}
+                    {""}
+                  {/if}
                 {:else if column.id === "requester"}
-                  {project.requester.join(", ")}
+                  {@const requesterValue = project.requester.join(", ")}
+                  {#if requesterValue.length > 0}
+                    {#each parseCellSegments(requesterValue) as segment, index (`${project.path}:requester:${index}`)}
+                      {#if segment.linkReference}
+                        <a
+                          href={encodeURI(segment.target ?? "")}
+                          class="opn-link"
+                          aria-label={`Open requester link ${segment.text}`}
+                          onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", project.path)}
+                        >
+                          {segment.text}
+                        </a>
+                      {:else}
+                        {segment.text}
+                      {/if}
+                    {/each}
+                  {:else}
+                    {""}
+                  {/if}
                 {:else if column.kind === "property"}
-                  {customPropertyValue(project, column)}
+                  {@const propertyValue = customPropertyValue(project, column)}
+                  {#if propertyValue.length > 0}
+                    {#each parseCellSegments(propertyValue) as segment, index (`${project.path}:${column.id}:${index}`)}
+                      {#if segment.linkReference}
+                        <a
+                          href={encodeURI(segment.target ?? "")}
+                          class="opn-link"
+                          aria-label={`Open property link ${segment.text}`}
+                          onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", project.path)}
+                        >
+                          {segment.text}
+                        </a>
+                      {:else}
+                        {segment.text}
+                      {/if}
+                    {/each}
+                  {:else}
+                    {""}
+                  {/if}
                 {:else}
                   {""}
                 {/if}
@@ -528,21 +1340,9 @@
           {#if project.tasks.length > 0 && expandedProjects[project.path]}
             <tr class="opn-row-detail">
               <td colspan={state.projectGridColumns.length + 1}>
-                <div class="opn-task-detail-header">
-                  <strong>Tasks</strong>
-                  <button
-                    type="button"
-                    class="secondary"
-                    onclick={() => toggleCompleted(project.path)}
-                    aria-label={`Toggle completed tasks for ${project.displayName}`}
-                  >
-                    {showCompletedTasks[project.path] ? "Hide completed" : "Show completed"}
-                  </button>
-                </div>
-
                 <ul class="opn-task-list">
                   {#each sortedTasksByProject.get(project.path) ?? [] as task (task.id)}
-                    {#if shouldShowTask(project.path, task)}
+                    {#if shouldShowTask(task)}
                       <li>
                         <input
                           type="checkbox"
@@ -561,50 +1361,332 @@
             </tr>
           {/if}
         {/each}
-      </tbody>
-    </table>
-  {:else}
-    <table class="opn-table" aria-label="Tasks grid">
-      <thead>
-        <tr>
-          <th>Done</th>
-          <th>Task</th>
-          <th>Project</th>
-          <th>Requester</th>
-          <th>Start</th>
-          <th>Due</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each state.tasks as task (task.id)}
+      {:else}
+        {#each rootProjects as project (project.path)}
           <tr>
             <td>
-              <input
-                aria-label={`Toggle task ${getTaskDisplayText(task)}`}
-                type="checkbox"
-                class="opn-task-checkbox"
-                checked={task.state === "checked"}
-                use:checkboxVisualState={task.state}
-                onclick={(event) => handleTaskCheckboxClick(event, task)}
-              />
+              {#if hasChildProjects(project.path)}
+                <button
+                  type="button"
+                  class="secondary"
+                  aria-label={`Toggle children for ${project.displayName}`}
+                  onclick={() => toggleParentChildren(project.path)}
+                >
+                  {expandedParentProjects[project.path] ? "▾" : "▸"}
+                </button>
+              {/if}
             </td>
-            <td>{getTaskDisplayText(task)}</td>
-            <td>
-              <a
-                href={encodeURI(task.projectPath)}
-                class="opn-link"
-                aria-label={`Open project note ${task.projectName}`}
-                onclick={(event) => handleProjectLinkClick(event, task.projectPath)}
-              >
-                {task.projectName}
-              </a>
-            </td>
-            <td>{(task.projectRequester ?? []).join(", ")}</td>
-            <td>{task.startDate ?? ""}</td>
-            <td>{task.dueDate ?? ""}</td>
+            {#each state.projectGridColumns as column (column.id)}
+              <td>
+                {#if column.id === "project"}
+                  <a
+                    href={encodeURI(project.path)}
+                    class="opn-link"
+                    aria-label={`Open project note ${project.displayName}`}
+                    onclick={(event) => handleProjectLinkClick(event, project.path)}
+                  >
+                    {project.displayName}
+                  </a>
+                {:else if column.id === "status"}
+                  <select
+                    value={project.status}
+                    class={`opn-badge-select opn-status-badge ${statusBadgeClass(project.status)}`}
+                    onchange={(event) => handleStatusChange(project, event)}
+                  >
+                    {#each statusOptions as status (status)}
+                      <option value={status}>{status}</option>
+                    {/each}
+                  </select>
+                {:else if column.id === "priority"}
+                  <select
+                    value={project.priority}
+                    class={`opn-badge-select opn-priority-badge ${priorityBadgeClass(project.priority)}`}
+                    onchange={(event) => handlePriorityChange(project, event)}
+                  >
+                    {#each state.priorities as priority (priority)}
+                      <option value={priority}>{priority}</option>
+                    {/each}
+                  </select>
+                {:else if column.id === "start-date"}
+                  {project.startDate ?? ""}
+                {:else if column.id === "finish-date"}
+                  {project.finishDate ?? ""}
+                {:else if column.id === "due-date"}
+                  {project.dueDate ?? ""}
+                {:else if column.id === "tags"}
+                  {project.tags.join(", ")}
+                {:else if column.id === "parent-project"}
+                  {#if project.parentProject}
+                    {#each parseCellSegments(project.parentProject) as segment, index (`${project.path}:parent-mode-parent:${index}`)}
+                      {#if segment.linkReference}
+                        <a
+                          href={encodeURI(segment.target ?? "")}
+                          class="opn-link"
+                          aria-label={`Open parent project ${segment.text}`}
+                          onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", project.path)}
+                        >
+                          {segment.text}
+                        </a>
+                      {:else}
+                        {segment.text}
+                      {/if}
+                    {/each}
+                  {:else}
+                    {""}
+                  {/if}
+                {:else if column.id === "requester"}
+                  {@const requesterValue = project.requester.join(", ")}
+                  {#if requesterValue.length > 0}
+                    {#each parseCellSegments(requesterValue) as segment, index (`${project.path}:parent-mode-requester:${index}`)}
+                      {#if segment.linkReference}
+                        <a
+                          href={encodeURI(segment.target ?? "")}
+                          class="opn-link"
+                          aria-label={`Open requester link ${segment.text}`}
+                          onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", project.path)}
+                        >
+                          {segment.text}
+                        </a>
+                      {:else}
+                        {segment.text}
+                      {/if}
+                    {/each}
+                  {:else}
+                    {""}
+                  {/if}
+                {:else if column.kind === "property"}
+                  {@const propertyValue = customPropertyValue(project, column)}
+                  {#if propertyValue.length > 0}
+                    {#each parseCellSegments(propertyValue) as segment, index (`${project.path}:parent-mode:${column.id}:${index}`)}
+                      {#if segment.linkReference}
+                        <a
+                          href={encodeURI(segment.target ?? "")}
+                          class="opn-link"
+                          aria-label={`Open property link ${segment.text}`}
+                          onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", project.path)}
+                        >
+                          {segment.text}
+                        </a>
+                      {:else}
+                        {segment.text}
+                      {/if}
+                    {/each}
+                  {:else}
+                    {""}
+                  {/if}
+                {:else}
+                  {""}
+                {/if}
+              </td>
+            {/each}
           </tr>
+
+          {#if hasChildProjects(project.path) && expandedParentProjects[project.path]}
+            <tr class="opn-row-detail">
+              <td colspan={state.projectGridColumns.length + 1}>
+                <table class="opn-table opn-child-table" aria-label={`Children for ${project.displayName}`}>
+                  <tbody>
+                    {#each childrenByParent.get(project.path) ?? [] as child (child.path)}
+                      <tr>
+                        {#each state.projectGridColumns as column (column.id)}
+                          <td>
+                            {#if column.id === "project"}
+                              <a
+                                href={encodeURI(child.path)}
+                                class="opn-link"
+                                aria-label={`Open project note ${child.displayName}`}
+                                onclick={(event) => handleProjectLinkClick(event, child.path)}
+                              >
+                                {child.displayName}
+                              </a>
+                            {:else if column.id === "status"}
+                              <select
+                                value={child.status}
+                                class={`opn-badge-select opn-status-badge ${statusBadgeClass(child.status)}`}
+                                onchange={(event) => handleStatusChange(child, event)}
+                              >
+                                {#each statusOptions as status (status)}
+                                  <option value={status}>{status}</option>
+                                {/each}
+                              </select>
+                            {:else if column.id === "priority"}
+                              <select
+                                value={child.priority}
+                                class={`opn-badge-select opn-priority-badge ${priorityBadgeClass(child.priority)}`}
+                                onchange={(event) => handlePriorityChange(child, event)}
+                              >
+                                {#each state.priorities as priority (priority)}
+                                  <option value={priority}>{priority}</option>
+                                {/each}
+                              </select>
+                            {:else if column.id === "start-date"}
+                              {child.startDate ?? ""}
+                            {:else if column.id === "finish-date"}
+                              {child.finishDate ?? ""}
+                            {:else if column.id === "due-date"}
+                              {child.dueDate ?? ""}
+                            {:else if column.id === "tags"}
+                              {child.tags.join(", ")}
+                            {:else if column.id === "parent-project"}
+                              {#if child.parentProject}
+                                {#each parseCellSegments(child.parentProject) as segment, index (`${child.path}:child-parent:${index}`)}
+                                  {#if segment.linkReference}
+                                    <a
+                                      href={encodeURI(segment.target ?? "")}
+                                      class="opn-link"
+                                      aria-label={`Open parent project ${segment.text}`}
+                                      onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", child.path)}
+                                    >
+                                      {segment.text}
+                                    </a>
+                                  {:else}
+                                    {segment.text}
+                                  {/if}
+                                {/each}
+                              {:else}
+                                {""}
+                              {/if}
+                            {:else if column.id === "requester"}
+                              {@const childRequesterValue = child.requester.join(", ")}
+                              {#if childRequesterValue.length > 0}
+                                {#each parseCellSegments(childRequesterValue) as segment, index (`${child.path}:child-requester:${index}`)}
+                                  {#if segment.linkReference}
+                                    <a
+                                      href={encodeURI(segment.target ?? "")}
+                                      class="opn-link"
+                                      aria-label={`Open requester link ${segment.text}`}
+                                      onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", child.path)}
+                                    >
+                                      {segment.text}
+                                    </a>
+                                  {:else}
+                                    {segment.text}
+                                  {/if}
+                                {/each}
+                              {:else}
+                                {""}
+                              {/if}
+                            {:else if column.kind === "property"}
+                              {@const propertyValue = customPropertyValue(child, column)}
+                              {#if propertyValue.length > 0}
+                                {#each parseCellSegments(propertyValue) as segment, index (`${child.path}:child-prop:${column.id}:${index}`)}
+                                  {#if segment.linkReference}
+                                    <a
+                                      href={encodeURI(segment.target ?? "")}
+                                      class="opn-link"
+                                      aria-label={`Open property link ${segment.text}`}
+                                      onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", child.path)}
+                                    >
+                                      {segment.text}
+                                    </a>
+                                  {:else}
+                                    {segment.text}
+                                  {/if}
+                                {/each}
+                              {:else}
+                                {""}
+                              {/if}
+                            {:else}
+                              {""}
+                            {/if}
+                          </td>
+                        {/each}
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </td>
+            </tr>
+          {/if}
         {/each}
-      </tbody>
-    </table>
+      {/if}
+    </GridTable>
+  {:else}
+    <GridTable
+      ariaLabel="Tasks grid"
+      columns={visibleTaskColumns.map((column) => ({
+        id: column.id,
+        label: column.label,
+        sortable: true,
+        sortKey: column.sortField,
+      }))}
+      sortBy={taskSortBy}
+      sortDirection={taskSortDirection}
+      onSort={handleTaskSort}
+    >
+      {#each sortedTasks as task (task.id)}
+        <tr>
+          {#each visibleTaskColumns as column (column.id)}
+            <td>
+              {#if column.id === "done"}
+                <input
+                  aria-label={`Toggle task ${getTaskDisplayText(task)}`}
+                  type="checkbox"
+                  class="opn-task-checkbox"
+                  checked={task.state === "checked"}
+                  use:checkboxVisualState={task.state}
+                  onclick={(event) => handleTaskCheckboxClick(event, task)}
+                />
+              {:else if column.id === "task"}
+                <a
+                  href={encodeURI(task.projectPath)}
+                  class="opn-link"
+                  aria-label={`Open project note ${task.projectName}`}
+                  onclick={(event) => handleTaskLinkClick(event, task)}
+                >
+                  {getTaskDisplayText(task)}
+                </a>
+              {:else if column.id === "project"}
+                <a
+                  href={encodeURI(task.projectPath)}
+                  class="opn-link"
+                  aria-label={`Open project note ${task.projectName}`}
+                  onclick={(event) => handleProjectLinkClick(event, task.projectPath)}
+                >
+                  {task.projectName}
+                </a>
+              {:else if column.id === "requester"}
+                {@const taskRequesterValue = (task.projectRequester ?? []).join(", ")}
+                {#if taskRequesterValue.length > 0}
+                  {#each parseCellSegments(taskRequesterValue) as segment, index (`${task.id}:requester:${index}`)}
+                    {#if segment.linkReference}
+                      <a
+                        href={encodeURI(segment.target ?? "")}
+                        class="opn-link"
+                        aria-label={`Open requester link ${segment.text}`}
+                        onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", task.projectPath)}
+                      >
+                        {segment.text}
+                      </a>
+                    {:else}
+                      {segment.text}
+                    {/if}
+                  {/each}
+                {:else}
+                  {""}
+                {/if}
+              {:else if column.id === "start"}
+                {task.startDate ?? ""}
+              {:else if column.id === "due"}
+                {task.dueDate ?? ""}
+              {:else if column.id === "timing"}
+                {@const timingStatuses = taskTimingStatuses(task)}
+                {#if timingStatuses.length > 0}
+                  <div class="opn-task-timing-badges">
+                    {#each timingStatuses as timing (timing)}
+                      <span class={`opn-task-timing-badge opn-task-timing-${badgeToken(timing)}`}>
+                        {timing}
+                      </span>
+                    {/each}
+                  </div>
+                {:else}
+                  {""}
+                {/if}
+              {/if}
+            </td>
+          {/each}
+        </tr>
+      {/each}
+    </GridTable>
   {/if}
 </div>

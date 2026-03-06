@@ -88,3 +88,4 @@ export const VIEW_TYPES = {
 } as const;
 
 export const UNKNOWN_STATUS = "Unknown";
+export const FILTER_NONE_TOKEN = "__none__";

@@ -1,5 +1,5 @@
 import { get, writable, type Writable } from "svelte/store";
-import { PROJECT_GRID_BASE_COLUMNS } from "../constants";
+import { FILTER_NONE_TOKEN, PROJECT_GRID_BASE_COLUMNS } from "../constants";
 import type {
   BoardType,
   ProjectGridColumn,
@@ -18,13 +18,16 @@ import { canonicalPropertyName, resolveAreaPropertyTemplates } from "../utils/pr
 interface Dependencies {
   indexService: ProjectIndexService;
   noteOpenService: NoteOpenService;
+  openSettings: () => void;
   createProject: () => Promise<void>;
+  createProjectInAreaWithStatus: (areaId: string | null, status: string) => Promise<void>;
   createTask: (areaId: string | null) => Promise<void>;
   getSettings: () => ProjectSettings;
   persistSettings: () => Promise<void>;
   boardType: BoardType;
   variant: ViewVariant;
   initialAreaId?: string | null;
+  initialGridTab?: "projects" | "tasks" | "kanban";
 }
 
 const RESERVED_PROJECT_COLUMN_PROPERTY_KEYS = new Set<string>([
@@ -44,7 +47,9 @@ export class ProjectViewStore {
 
   private readonly indexService: ProjectIndexService;
   private readonly noteOpenService: NoteOpenService;
+  private readonly openSettingsAction: () => void;
   private readonly createProject: () => Promise<void>;
+  private readonly createProjectInAreaWithStatus: (areaId: string | null, status: string) => Promise<void>;
   private readonly createTask: (areaId: string | null) => Promise<void>;
   private readonly getSettings: () => ProjectSettings;
   private readonly persistSettings: () => Promise<void>;
@@ -53,7 +58,9 @@ export class ProjectViewStore {
   constructor(dependencies: Dependencies) {
     this.indexService = dependencies.indexService;
     this.noteOpenService = dependencies.noteOpenService;
+    this.openSettingsAction = dependencies.openSettings;
     this.createProject = dependencies.createProject;
+    this.createProjectInAreaWithStatus = dependencies.createProjectInAreaWithStatus;
     this.createTask = dependencies.createTask;
     this.getSettings = dependencies.getSettings;
     this.persistSettings = dependencies.persistSettings;
@@ -62,6 +69,7 @@ export class ProjectViewStore {
     const initialArea = this.resolveInitialAreaId(dependencies.initialAreaId, settings);
     const initialAreaConfig = settings.areas.find((area) => area.id === initialArea) ?? null;
     const initialGridColumns = this.resolveGridColumns(settings, initialArea, initialAreaConfig);
+    const initialGridTab = this.resolveInitialGridTab(dependencies.initialGridTab, dependencies.boardType);
 
     this.state = writable<ProjectViewState>({
       areas: settings.areas,
@@ -70,7 +78,7 @@ export class ProjectViewStore {
       priorities: this.indexService.getPrioritiesForArea(initialArea),
       boardType: dependencies.boardType,
       variant: dependencies.variant,
-      gridTab: "projects",
+      gridTab: initialGridTab,
       projectSearch: "",
       taskSearch: "",
       statusFilter: settings.defaultProjectStatuses,
@@ -82,8 +90,8 @@ export class ProjectViewStore {
       sortBy: settings.defaultSortBy,
       sortDirection: settings.defaultSortDirection,
       projects: [],
+      projectStatusByPath: {},
       tasks: [],
-      showCompletedTasksInTaskView: false,
       triStateCheckboxes: settings.enableTriStateCheckboxes,
       hiddenKanbanStatuses: settings.kanbanHiddenStatuses,
       showHiddenKanban: false,
@@ -112,10 +120,18 @@ export class ProjectViewStore {
       const areaTagPrefix = currentArea ? `area/${currentArea.slug}` : null;
       const gridColumns = this.resolveGridColumns(settings, currentAreaId, currentArea);
 
-      const statusFilter = current.statusFilter.filter((status) => statuses.includes(status) || status === "Unknown");
-      const priorityFilter = current.priorityFilter.filter((priority) => priorities.includes(priority));
+      const statusFilter = current.statusFilter.filter(
+        (status) => statuses.includes(status) || status === "Unknown" || status === FILTER_NONE_TOKEN,
+      );
+      const priorityFilter = current.priorityFilter.filter(
+        (priority) => priorities.includes(priority) || priority === FILTER_NONE_TOKEN,
+      );
 
       const allAreaProjects = this.indexService.queryProjects({ areaId: currentAreaId });
+      const projectStatusByPath = allAreaProjects.reduce<Record<string, string>>((acc, project) => {
+        acc[project.path] = project.status;
+        return acc;
+      }, {});
       const availableAreaTags = Array.from(
         new Set(
           allAreaProjects
@@ -130,7 +146,7 @@ export class ProjectViewStore {
         areaId: currentAreaId,
         search: current.projectSearch,
         statuses:
-          current.boardType === "grid" && statusFilter.length > 0
+          current.gridTab !== "kanban" && statusFilter.length > 0
             ? statusFilter
             : undefined,
         priorities: priorityFilter.length > 0 ? priorityFilter : undefined,
@@ -142,7 +158,7 @@ export class ProjectViewStore {
       const tasks = this.indexService.queryTasks({
         areaId: currentAreaId,
         search: current.taskSearch,
-        includeCompleted: current.showCompletedTasksInTaskView,
+        includeCompleted: true,
         sortBy: "due-date",
         sortDirection: "asc",
       });
@@ -162,6 +178,7 @@ export class ProjectViewStore {
         hiddenKanbanStatuses: settings.kanbanHiddenStatuses,
         triStateCheckboxes: settings.enableTriStateCheckboxes,
         projects,
+        projectStatusByPath,
         tasks,
       };
     });
@@ -172,8 +189,9 @@ export class ProjectViewStore {
     this.refresh();
   }
 
-  setGridTab(tab: "projects" | "tasks"): void {
+  setGridTab(tab: "projects" | "tasks" | "kanban"): void {
     this.state.update((current) => ({ ...current, gridTab: tab }));
+    this.refresh();
   }
 
   setProjectSearch(search: string): void {
@@ -183,14 +201,6 @@ export class ProjectViewStore {
 
   setTaskSearch(search: string): void {
     this.state.update((current) => ({ ...current, taskSearch: search }));
-    this.refresh();
-  }
-
-  toggleTaskViewCompletedVisibility(): void {
-    this.state.update((current) => ({
-      ...current,
-      showCompletedTasksInTaskView: !current.showCompletedTasksInTaskView,
-    }));
     this.refresh();
   }
 
@@ -208,6 +218,14 @@ export class ProjectViewStore {
         statusFilter: Array.from(existing),
       };
     });
+    this.refresh();
+  }
+
+  setStatusFilter(statuses: string[]): void {
+    this.state.update((current) => ({
+      ...current,
+      statusFilter: Array.from(new Set(statuses)),
+    }));
     this.refresh();
   }
 
@@ -230,6 +248,14 @@ export class ProjectViewStore {
         priorityFilter: Array.from(existing),
       };
     });
+    this.refresh();
+  }
+
+  setPriorityFilter(priorities: string[]): void {
+    this.state.update((current) => ({
+      ...current,
+      priorityFilter: Array.from(new Set(priorities)),
+    }));
     this.refresh();
   }
 
@@ -269,8 +295,27 @@ export class ProjectViewStore {
     this.state.update((current) => ({ ...current, showHiddenKanban: !current.showHiddenKanban }));
   }
 
+  async setKanbanHiddenStatuses(statuses: string[]): Promise<void> {
+    const settings = this.getSettings();
+    settings.kanbanHiddenStatuses = Array.from(new Set(statuses));
+    await this.persistSettings();
+    this.refresh();
+  }
+
   async openProject(path: string): Promise<void> {
     await this.noteOpenService.openProject(path);
+  }
+
+  async openProjectLink(linkText: string, sourcePath?: string): Promise<void> {
+    await this.noteOpenService.openProjectLink(linkText, sourcePath);
+  }
+
+  async openProjectTask(path: string, lineNumber: number): Promise<void> {
+    await this.noteOpenService.openProjectTask(path, lineNumber);
+  }
+
+  openPluginSettings(): void {
+    this.openSettingsAction();
   }
 
   async updateProject(update: ProjectMetadataUpdate): Promise<void> {
@@ -279,6 +324,11 @@ export class ProjectViewStore {
 
   async createProjectNote(): Promise<void> {
     await this.createProject();
+  }
+
+  async createProjectNoteInCurrentAreaWithStatus(status: string): Promise<void> {
+    const areaId = get(this.state).currentAreaId;
+    await this.createProjectInAreaWithStatus(areaId, status);
   }
 
   async createTaskInCurrentArea(): Promise<void> {
@@ -310,6 +360,17 @@ export class ProjectViewStore {
     }
 
     return settings.areas[0]?.id ?? null;
+  }
+
+  private resolveInitialGridTab(
+    gridTab: "projects" | "tasks" | "kanban" | undefined,
+    boardType: BoardType,
+  ): "projects" | "tasks" | "kanban" {
+    if (gridTab === "projects" || gridTab === "tasks" || gridTab === "kanban") {
+      return gridTab;
+    }
+
+    return boardType === "kanban" ? "kanban" : "projects";
   }
 
   private resolveGridColumns(
@@ -390,7 +451,10 @@ export class ProjectViewStore {
       deduped.push(id);
     }
 
-    const withoutProject = deduped.filter((id) => id !== "project");
-    return ["project", ...withoutProject];
+    if (!deduped.includes("project") && availableIds.has("project")) {
+      deduped.unshift("project");
+    }
+
+    return deduped;
   }
 }

@@ -1,8 +1,9 @@
 export type IncludeMode = "top-level" | "recursive";
 export type StartupView =
   | "none"
-  | "project-notes-grid"
-  | "project-notes-kanban";
+  | "projects"
+  | "tasks"
+  | "kanban";
 
 export type OpenTarget =
   | "new-tab"
@@ -150,7 +151,7 @@ export interface ProjectViewState {
   priorities: string[];
   boardType: BoardType;
   variant: ViewVariant;
-  gridTab: "projects" | "tasks";
+  gridTab: "projects" | "tasks" | "kanban";
   projectSearch: string;
   taskSearch: string;
   statusFilter: string[];
@@ -162,8 +163,8 @@ export interface ProjectViewState {
   sortBy: ProjectSortField;
   sortDirection: SortDirection;
   projects: ProjectNote[];
+  projectStatusByPath: Record<string, string>;
   tasks: ProjectTask[];
-  showCompletedTasksInTaskView: boolean;
   triStateCheckboxes: boolean;
   hiddenKanbanStatuses: string[];
   showHiddenKanban: boolean;

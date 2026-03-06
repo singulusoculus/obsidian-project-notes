@@ -11,6 +11,7 @@ import {
   TAbstractFile,
   TFile,
   TextComponent,
+  type ViewStateResult,
   type WorkspaceLeaf,
 } from "obsidian";
 import { RangeSetBuilder } from "@codemirror/state";
@@ -62,13 +63,13 @@ interface ViewDefinition {
 const PRIMARY_VIEW_DEFINITIONS: ViewDefinition[] = [
   {
     type: VIEW_TYPES.grid,
-    displayText: "Project Notes Grid",
+    displayText: "Project Notes",
     boardType: "grid",
     variant: "default",
   },
   {
     type: VIEW_TYPES.kanban,
-    displayText: "Project Notes Kanban",
+    displayText: "Project Notes",
     boardType: "kanban",
     variant: "default",
   },
@@ -180,17 +181,22 @@ class ProjectNotesView extends ItemView {
     this.contentEl.addClass("project-notes-view");
 
     const areaId = this.extractInitialAreaId();
+    const gridTab = this.extractInitialGridTab();
 
     this.viewStore = new ProjectViewStore({
       indexService: this.plugin.indexService,
       noteOpenService: this.plugin.noteOpenService,
+      openSettings: () => this.plugin.openProjectNotesSettings(),
       createProject: () => this.plugin.createProjectNote(),
+      createProjectInAreaWithStatus: (areaId, status) =>
+        this.plugin.createProjectNote({ areaId, defaultStatus: status }),
       createTask: (areaId) => this.plugin.createTaskInArea(areaId),
       getSettings: () => this.plugin.settings,
       persistSettings: () => this.plugin.saveSettings({ reconcile: false }),
       boardType: definition.boardType,
       variant: definition.variant,
       initialAreaId: areaId,
+      initialGridTab: gridTab,
     });
 
     this.mountedComponent = mount(ProjectBoard, {
@@ -213,6 +219,26 @@ class ProjectNotesView extends ItemView {
     this.viewStore = null;
   }
 
+  async setState(state: unknown, result: ViewStateResult): Promise<void> {
+    await super.setState(state, result);
+
+    if (!state || typeof state !== "object") {
+      return;
+    }
+
+    const candidate = state as Record<string, unknown>;
+
+    const areaId = candidate.areaId;
+    if (typeof areaId === "string" && areaId.trim().length > 0) {
+      this.viewStore?.setArea(areaId);
+    }
+
+    const gridTab = candidate.gridTab;
+    if (gridTab === "projects" || gridTab === "tasks" || gridTab === "kanban") {
+      this.viewStore?.setGridTab(gridTab);
+    }
+  }
+
   private extractInitialAreaId(): string | null {
     const state = this.leaf.getViewState().state;
     if (!state || typeof state !== "object" || !("areaId" in state)) {
@@ -225,6 +251,20 @@ class ProjectNotesView extends ItemView {
     }
 
     return value;
+  }
+
+  private extractInitialGridTab(): "projects" | "tasks" | "kanban" | undefined {
+    const state = this.leaf.getViewState().state;
+    if (!state || typeof state !== "object" || !("gridTab" in state)) {
+      return undefined;
+    }
+
+    const value = state.gridTab;
+    if (value === "projects" || value === "tasks" || value === "kanban") {
+      return value;
+    }
+
+    return undefined;
   }
 
   private getResolvedDefinition(): ViewDefinition {
@@ -352,6 +392,10 @@ class AddTaskModal extends Modal {
   private readonly projects: ProjectNote[];
   private readonly resolve: (value: AddTaskRequest | null) => void;
   private selectedProjectPath: string;
+  private projectFilterInput: TextComponent | null = null;
+  private projectPopoverEl: HTMLDivElement | null = null;
+  private projectSelectEl: HTMLSelectElement | null = null;
+  private projectPickerPointerHandler: ((event: PointerEvent) => void) | null = null;
   private taskInput: TextComponent | null = null;
   private startDateInput: HTMLInputElement | null = null;
   private dueDateInput: HTMLInputElement | null = null;
@@ -371,18 +415,79 @@ class AddTaskModal extends Modal {
     contentEl.createEl("h3", { text: "Add Task" });
 
     const projectWrapper = contentEl.createDiv({ cls: "opn-modal-field" });
-    projectWrapper.createEl("label", { text: "Project", attr: { for: "opn-task-project" } });
-    const projectSelect = projectWrapper.createEl("select", { attr: { id: "opn-task-project", "aria-label": "Project" } });
-    for (const project of this.projects) {
-      projectSelect.createEl("option", {
-        text: project.displayName || project.title,
-        attr: { value: project.path },
-      });
-    }
-    projectSelect.value = this.selectedProjectPath;
-    projectSelect.addEventListener("change", (event) => {
-      this.selectedProjectPath = (event.currentTarget as HTMLSelectElement).value;
+    projectWrapper.createEl("label", { text: "Project", attr: { for: "opn-task-project-filter" } });
+    const projectPickerWrapper = projectWrapper.createDiv({ cls: "opn-task-project-picker" });
+
+    this.projectFilterInput = new TextComponent(projectPickerWrapper);
+    this.projectFilterInput.inputEl.id = "opn-task-project-filter";
+    this.projectFilterInput.inputEl.setAttribute("aria-label", "Search projects");
+    this.projectFilterInput.setPlaceholder("Search or choose project");
+
+    this.projectPopoverEl = projectPickerWrapper.createDiv({ cls: "opn-task-project-popover is-hidden" });
+    this.projectSelectEl = this.projectPopoverEl.createEl("select", {
+      attr: {
+        id: "opn-task-project",
+        "aria-label": "Project options",
+      },
     });
+    this.projectSelectEl.addClass("opn-task-project-select");
+    this.projectSelectEl.addEventListener("change", (event) => {
+      this.selectedProjectPath = (event.currentTarget as HTMLSelectElement).value;
+      this.syncSelectedProjectLabel();
+    });
+    this.projectSelectEl.addEventListener("dblclick", () => {
+      this.hideProjectPopover();
+      this.taskInput?.inputEl.focus();
+    });
+    this.projectSelectEl.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        this.selectedProjectPath = this.projectSelectEl?.value ?? "";
+        this.syncSelectedProjectLabel();
+        this.hideProjectPopover();
+        this.taskInput?.inputEl.focus();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        this.hideProjectPopover();
+        this.projectFilterInput?.inputEl.focus();
+      }
+    });
+
+    this.projectFilterInput.inputEl.addEventListener("focus", () => {
+      this.projectFilterInput?.inputEl.select();
+      this.renderFilteredProjectOptions("");
+      this.showProjectPopover();
+    });
+    this.projectFilterInput.inputEl.addEventListener("click", () => {
+      this.renderFilteredProjectOptions("");
+      this.showProjectPopover();
+    });
+    this.projectFilterInput.inputEl.addEventListener("input", () => {
+      const query = this.projectFilterInput?.getValue() ?? "";
+      this.renderFilteredProjectOptions(query);
+      this.showProjectPopover();
+    });
+    this.projectFilterInput.inputEl.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        this.showProjectPopover();
+        this.projectSelectEl?.focus();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        this.hideProjectPopover();
+      }
+    });
+
+    this.renderFilteredProjectOptions("");
+    this.syncSelectedProjectLabel();
+
+    this.projectPickerPointerHandler = (event: PointerEvent) => {
+      if (this.isInsideProjectPicker(event.target)) {
+        return;
+      }
+      this.hideProjectPopover();
+    };
+    window.addEventListener("pointerdown", this.projectPickerPointerHandler, true);
 
     const taskWrapper = contentEl.createDiv({ cls: "opn-modal-field" });
     taskWrapper.createEl("label", { text: "Task", attr: { for: "opn-task-text" } });
@@ -464,14 +569,111 @@ class AddTaskModal extends Modal {
   }
 
   onClose(): void {
+    if (this.projectPickerPointerHandler) {
+      window.removeEventListener("pointerdown", this.projectPickerPointerHandler, true);
+      this.projectPickerPointerHandler = null;
+    }
+
     if (!this.submitted) {
       this.resolve(null);
     }
+  }
+
+  private isInsideProjectPicker(target: EventTarget | null): boolean {
+    if (!(target instanceof Node)) {
+      return false;
+    }
+
+    return (
+      this.projectFilterInput?.inputEl.contains(target) === true ||
+      this.projectPopoverEl?.contains(target) === true
+    );
+  }
+
+  private showProjectPopover(): void {
+    if (!this.projectPopoverEl) {
+      return;
+    }
+
+    this.projectPopoverEl.classList.remove("is-hidden");
+  }
+
+  private hideProjectPopover(): void {
+    if (!this.projectPopoverEl) {
+      return;
+    }
+
+    this.projectPopoverEl.classList.add("is-hidden");
+  }
+
+  private renderFilteredProjectOptions(query: string): void {
+    if (!this.projectSelectEl) {
+      return;
+    }
+
+    const normalizedQuery = query.trim().toLowerCase();
+    const filteredProjects =
+      normalizedQuery.length === 0
+        ? this.projects
+        : this.projects.filter((project) => this.projectSearchText(project).includes(normalizedQuery));
+
+    const selectEl = this.projectSelectEl;
+    selectEl.empty();
+
+    if (filteredProjects.length === 0) {
+      this.selectedProjectPath = "";
+      const option = selectEl.createEl("option", {
+        text: "No matching projects",
+        attr: { value: "" },
+      });
+      option.disabled = true;
+      option.selected = true;
+      selectEl.size = 8;
+      return;
+    }
+
+    for (const project of filteredProjects) {
+      const option = selectEl.createEl("option", {
+        text: this.projectDisplayName(project),
+        attr: { value: project.path },
+      });
+      if (project.path === this.selectedProjectPath) {
+        option.selected = true;
+      }
+    }
+
+    if (!filteredProjects.some((project) => project.path === this.selectedProjectPath)) {
+      this.selectedProjectPath = filteredProjects[0].path;
+    }
+
+    selectEl.value = this.selectedProjectPath;
+    selectEl.size = Math.min(14, Math.max(8, filteredProjects.length));
+  }
+
+  private syncSelectedProjectLabel(): void {
+    if (!this.projectFilterInput) {
+      return;
+    }
+
+    const selectedProject = this.projects.find((project) => project.path === this.selectedProjectPath);
+    this.projectFilterInput.setValue(selectedProject ? this.projectDisplayName(selectedProject) : "");
+  }
+
+  private projectDisplayName(project: ProjectNote): string {
+    return project.displayName || project.title;
+  }
+
+  private projectSearchText(project: ProjectNote): string {
+    return [project.displayName, project.title, project.path]
+      .filter((value) => value && value.length > 0)
+      .join(" ")
+      .toLowerCase();
   }
 }
 
 class ProjectNotesSettingTab extends PluginSettingTab {
   private readonly plugin: ObsidianProjectNotesPlugin;
+  private activePanel: "general" | "properties" | "areas" = "general";
 
   constructor(app: App, plugin: ObsidianProjectNotesPlugin) {
     super(app, plugin);
@@ -482,8 +684,53 @@ class ProjectNotesSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h2", { text: "Obsidian Project Notes" });
+    containerEl.createEl("h2", { text: "Project Notes" });
 
+    const tabsEl = containerEl.createDiv({ cls: "opn-settings-tabs" });
+    this.renderPanelTabButton(tabsEl, "general", "General");
+    this.renderPanelTabButton(tabsEl, "properties", "Properties");
+    this.renderPanelTabButton(tabsEl, "areas", "Areas");
+
+    const panelEl = containerEl.createDiv({ cls: "opn-settings-panel" });
+    if (this.activePanel === "general") {
+      this.renderGeneralSettings(panelEl);
+      return;
+    }
+
+    if (this.activePanel === "properties") {
+      this.renderPropertiesSettings(panelEl);
+      return;
+    }
+
+    this.renderAreasSettings(panelEl);
+  }
+
+  private renderPanelTabButton(
+    containerEl: HTMLElement,
+    panel: "general" | "properties" | "areas",
+    label: string,
+  ): void {
+    const button = containerEl.createEl("button", {
+      text: label,
+      cls: "opn-settings-tab",
+      attr: { type: "button" },
+    });
+
+    if (this.activePanel === panel) {
+      button.addClass("is-active");
+    }
+
+    button.addEventListener("click", () => {
+      if (this.activePanel === panel) {
+        return;
+      }
+
+      this.activePanel = panel;
+      this.display();
+    });
+  }
+
+  private renderGeneralSettings(containerEl: HTMLElement): void {
     new Setting(containerEl)
       .setName("Open project note target")
       .setDesc("Where notes opened from Grid/Kanban should appear.")
@@ -506,11 +753,11 @@ class ProjectNotesSettingTab extends PluginSettingTab {
       .setName("Open view on startup")
       .setDesc("Project Notes view to open when Obsidian starts.")
       .addDropdown((dropdown) => {
-        dropdown.addOption("none", "None");
-        for (const definition of PRIMARY_VIEW_DEFINITIONS) {
-          dropdown.addOption(definition.type, definition.displayText);
-        }
-
+        dropdown
+          .addOption("none", "None")
+          .addOption("projects", "Projects")
+          .addOption("tasks", "Tasks")
+          .addOption("kanban", "Kanban");
         dropdown.setValue(this.plugin.settings.startupView).onChange(async (value) => {
           this.plugin.settings.startupView = value as StartupView;
           await this.plugin.saveSettings({ reconcile: false });
@@ -548,39 +795,6 @@ class ProjectNotesSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         });
       });
-
-    containerEl.createEl("h3", { text: "Project Properties" });
-    containerEl.createEl("p", {
-      text: "Define default properties auto-added to new/normalized project notes. Missing properties are added; existing values are preserved.",
-    });
-
-    const tokenListEl = containerEl.createDiv();
-    tokenListEl.createEl("strong", { text: "Dynamic default tokens: " });
-    tokenListEl.createEl("span", {
-      text: DEFAULT_VALUE_TOKENS.map((token) => `${token.token} (${token.description})`).join(", "),
-    });
-
-    this.renderPropertyTemplateEditor({
-      containerEl,
-      heading: "Global default properties",
-      templates: this.plugin.settings.defaultProperties,
-      lockProtectedProperties: true,
-      onChange: async () => {
-        await this.plugin.saveSettings({ reconcile: false, syncPropertyTypes: true });
-      },
-      onAdd: async () => {
-        this.plugin.settings.defaultProperties.push({
-          name: this.nextPropertyName(this.plugin.settings.defaultProperties, "new-property"),
-          type: "text",
-          defaultValue: "",
-        });
-        await this.plugin.saveSettings({ reconcile: false, syncPropertyTypes: true });
-      },
-      onRemove: async (index) => {
-        this.plugin.settings.defaultProperties.splice(index, 1);
-        await this.plugin.saveSettings({ reconcile: false, syncPropertyTypes: true });
-      },
-    });
 
     new Setting(containerEl)
       .setName("Default project status filter")
@@ -649,14 +863,57 @@ class ProjectNotesSettingTab extends PluginSettingTab {
             }
           });
       });
+  }
 
-    containerEl.createEl("h3", { text: "Areas" });
+  private renderPropertiesSettings(containerEl: HTMLElement): void {
+    
+    containerEl.createEl("p", {
+      text: "Define default properties auto-added to new/normalized project notes. Missing properties are added; existing values are preserved.",
+    });
+
+    const tokenListEl = containerEl.createDiv();
+    tokenListEl.createEl("strong", { text: "Dynamic default tokens: " });
+    tokenListEl.createEl("span", {
+      text: DEFAULT_VALUE_TOKENS.map((token) => `${token.token} (${token.description})`).join(", "),
+    });
+
+    this.renderPropertyTemplateEditor({
+      containerEl,
+      heading: "Global default properties",
+      templates: this.plugin.settings.defaultProperties,
+      lockProtectedProperties: true,
+      onChange: async () => {
+        await this.plugin.saveSettings({ reconcile: false, syncPropertyTypes: true });
+      },
+      onAdd: async () => {
+        this.plugin.settings.defaultProperties.push({
+          name: this.nextPropertyName(this.plugin.settings.defaultProperties, "new-property"),
+          type: "text",
+          defaultValue: "",
+        });
+        await this.plugin.saveSettings({ reconcile: false, syncPropertyTypes: true });
+      },
+      onRemove: async (index) => {
+        this.plugin.settings.defaultProperties.splice(index, 1);
+        await this.plugin.saveSettings({ reconcile: false, syncPropertyTypes: true });
+      },
+    });
+  }
+
+  private renderAreasSettings(containerEl: HTMLElement): void {
+    containerEl.createEl("p", {
+      text: "Setup new areas and edit/remove existing areas",
+    });
 
     for (const area of this.plugin.settings.areas) {
       const areaContainer = containerEl.createDiv({ cls: "opn-area-setting" });
-      const areaTitleEl = areaContainer.createEl("h4", { text: area.name || "Unnamed Area" });
+      const areaDisclosure = areaContainer.createEl("details", { cls: "opn-area-disclosure" });
+      areaDisclosure.open = false;
+      const areaSummaryEl = areaDisclosure.createEl("summary", { cls: "opn-area-summary" });
+      const areaTitleEl = areaSummaryEl.createEl("strong", { text: area.name || "Unnamed Area" });
+      const areaSettingsEl = areaDisclosure.createDiv({ cls: "opn-area-settings" });
 
-      new Setting(areaContainer)
+      new Setting(areaSettingsEl)
         .setName("Area Name")
         .addText((text) => {
           text.setValue(area.name).onChange(async (value) => {
@@ -667,7 +924,7 @@ class ProjectNotesSettingTab extends PluginSettingTab {
           });
         });
 
-      new Setting(areaContainer)
+      new Setting(areaSettingsEl)
         .setName("Folder Path")
         .setDesc("Path inside vault, e.g. Projects/Client-A")
         .addText((text) => {
@@ -677,7 +934,7 @@ class ProjectNotesSettingTab extends PluginSettingTab {
           });
         });
 
-      new Setting(areaContainer)
+      new Setting(areaSettingsEl)
         .setName("Include Mode")
         .addDropdown((dropdown) => {
           dropdown
@@ -690,7 +947,7 @@ class ProjectNotesSettingTab extends PluginSettingTab {
             });
         });
 
-      new Setting(areaContainer)
+      new Setting(areaSettingsEl)
         .setName("Status overrides")
         .setDesc("Optional comma-separated list. Empty means use global statuses.")
         .addText((text) => {
@@ -701,7 +958,7 @@ class ProjectNotesSettingTab extends PluginSettingTab {
           });
         });
 
-      new Setting(areaContainer)
+      new Setting(areaSettingsEl)
         .setName("Priority overrides")
         .setDesc("Optional comma-separated list. Empty means use global priorities.")
         .addText((text) => {
@@ -712,7 +969,7 @@ class ProjectNotesSettingTab extends PluginSettingTab {
           });
         });
 
-      new Setting(areaContainer)
+      new Setting(areaSettingsEl)
         .setName("Disabled global properties")
         .setDesc("Comma-separated property names to skip auto-adding in this Area. Locked properties are ignored.")
         .addText((text) => {
@@ -726,7 +983,7 @@ class ProjectNotesSettingTab extends PluginSettingTab {
         });
 
       this.renderPropertyTemplateEditor({
-        containerEl: areaContainer,
+        containerEl: areaSettingsEl,
         heading: "Area property overrides",
         templates: area.propertyOverrides ?? (area.propertyOverrides = []),
         lockProtectedProperties: true,
@@ -749,7 +1006,7 @@ class ProjectNotesSettingTab extends PluginSettingTab {
         },
       });
 
-      new Setting(areaContainer)
+      new Setting(areaSettingsEl)
         .setName("Remove Area")
         .addButton((button) => {
           button
@@ -1011,6 +1268,24 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
     this.schedulePersist();
   }
 
+  openProjectNotesSettings(): void {
+    const settingsApi = (
+      this.app as unknown as {
+        setting?: {
+          open: () => void;
+          openTabById?: (id: string) => void;
+        };
+      }
+    ).setting;
+
+    if (!settingsApi) {
+      return;
+    }
+
+    settingsApi.open();
+    settingsApi.openTabById?.(this.manifest.id);
+  }
+
   private registerViews(): void {
     for (const definition of ALL_VIEW_DEFINITIONS) {
       this.registerView(definition.type, (leaf) => new ProjectNotesView(leaf, this, definition));
@@ -1018,21 +1293,29 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
   }
 
   private registerCommands(): void {
-    for (const definition of PRIMARY_VIEW_DEFINITIONS) {
-      this.addCommand({
-        id: `open-${definition.type}`,
-        name: definition.displayText,
-        callback: () => {
-          void this.activateView(definition.type);
-        },
-      });
-    }
+    this.addCommand({
+      id: "open-project-notes",
+      name: "Open Project Notes",
+      callback: () => {
+        const startupView = this.settings.startupView;
+        const targetTab = startupView === "none" ? "projects" : startupView;
+        void this.openProjectNotes(targetTab);
+      },
+    });
 
     this.addCommand({
       id: "create-project-note",
       name: "Create Project Note",
       callback: () => {
         void this.createProjectNote();
+      },
+    });
+
+    this.addCommand({
+      id: "create-project-note-task",
+      name: "Create Project Note Task",
+      callback: () => {
+        void this.createProjectNoteTask();
       },
     });
 
@@ -1046,7 +1329,7 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
 
     this.addCommand({
       id: "backfill-missing-project-properties",
-      name: "Backfill Missing Project Properties",
+      name: "Backfill Missing Projet Properties",
       callback: () => {
         void this.backfillMissingProperties();
       },
@@ -1240,41 +1523,56 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
     }, 1000);
   }
 
-  private async activateView(type: string): Promise<void> {
-    let leaf = this.app.workspace.getLeavesOfType(type)[0];
-
-    if (!leaf) {
-      leaf = this.app.workspace.getLeaf("tab");
-      await leaf.setViewState({
-        type,
-        active: true,
-      });
-    } else {
-      await leaf.setViewState({
-        type,
-        active: true,
-      });
-    }
-
-    this.app.workspace.revealLeaf(leaf);
-  }
-
   private async openStartupView(): Promise<void> {
     const startupView = this.settings.startupView;
     if (startupView === "none") {
       return;
     }
 
-    await this.activateView(startupView);
+    await this.openProjectNotes(startupView);
   }
 
-  async createProjectNote(): Promise<void> {
+  private async openProjectNotes(tab: "projects" | "tasks" | "kanban"): Promise<void> {
+    const targetType = tab === "kanban" ? VIEW_TYPES.kanban : VIEW_TYPES.grid;
+
+    let leaf = this.app.workspace.getLeavesOfType(targetType)[0];
+    if (!leaf) {
+      leaf =
+        this.app.workspace.getLeavesOfType(VIEW_TYPES.grid)[0] ??
+        this.app.workspace.getLeavesOfType(VIEW_TYPES.kanban)[0] ??
+        this.app.workspace.getLeaf("tab");
+    }
+
+    const existingState = leaf.getViewState().state;
+    const state =
+      existingState && typeof existingState === "object"
+        ? { ...(existingState as Record<string, unknown>), gridTab: tab }
+        : { gridTab: tab };
+
+    await leaf.setViewState({
+      type: targetType,
+      active: true,
+      state,
+    });
+
+    this.app.workspace.revealLeaf(leaf);
+  }
+
+  async createProjectNote(options: { areaId?: string | null; defaultStatus?: string } = {}): Promise<void> {
     if (this.settings.areas.length === 0) {
       new Notice("No Areas configured. Add one in plugin settings first.");
       return;
     }
 
-    const area = await this.promptAreaSelection();
+    let area: AreaConfig | null = null;
+    if (options.areaId) {
+      area = this.settings.areas.find((candidate) => candidate.id === options.areaId) ?? null;
+    }
+
+    if (!area) {
+      area = await this.promptAreaSelection();
+    }
+
     if (!area) {
       return;
     }
@@ -1295,8 +1593,37 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
     await this.ensureFolderExists(area.folderPath);
     const file = await this.app.vault.create(path, "");
     await this.indexService.onFileCreated(file);
+
+    if (options.defaultStatus && options.defaultStatus.trim().length > 0) {
+      await this.indexService.updateProjectMetadata({
+        path: file.path,
+        key: "status",
+        value: options.defaultStatus,
+      });
+    }
+
     await this.noteOpenService.openProject(file.path);
     new Notice(`Created ${normalizedFileName}`);
+  }
+
+  async createProjectNoteTask(): Promise<void> {
+    if (this.settings.areas.length === 0) {
+      new Notice("No Areas configured. Add one in plugin settings first.");
+      return;
+    }
+
+    let area: AreaConfig | null = null;
+    if (this.settings.areas.length === 1) {
+      area = this.settings.areas[0];
+    } else {
+      area = await this.promptAreaSelection();
+    }
+
+    if (!area) {
+      return;
+    }
+
+    await this.createTaskInArea(area.id);
   }
 
   async createTaskInArea(areaId: string | null): Promise<void> {
@@ -1304,10 +1631,10 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
       areaId,
       sortBy: "project",
       sortDirection: "asc",
-    });
+    }).filter((project) => this.isTaskAssignableProjectStatus(project.status));
 
     if (projects.length === 0) {
-      new Notice("No projects available in this Area.");
+      new Notice("No active projects available in this Area.");
       return;
     }
 
@@ -1323,6 +1650,11 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
     }
 
     new Notice("Task added.");
+  }
+
+  private isTaskAssignableProjectStatus(status: string): boolean {
+    const normalized = status.trim().toLowerCase();
+    return normalized !== "done" && normalized !== "cancelled" && normalized !== "canceled";
   }
 
   private async backfillMissingProperties(): Promise<void> {
