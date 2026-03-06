@@ -27,6 +27,12 @@ This document chronicles the implementation journey, key decisions, lessons lear
   - supports live filtering, keyboard navigation, outside-click close, and explicit selection sync
   - increased popover/list height for easier scanning
   - restricted selectable projects to active statuses only (excludes Done/Cancelled)
+- Updated new-project flow to skip Area prompt when exactly one Area is configured.
+- Extended text/list property rendering to support external links in addition to wikilinks:
+  - markdown-style links (for example `[label](https://...)`)
+  - plain URL and `mailto:` links
+  - applied across Parent, Requester, and custom property cells (including child/task requester rows)
+- Updated Projects grid expand behavior to hide task expand toggles when a project has only completed tasks.
 - Verified all changes with `npm run build` after each implementation batch.
 
 ### Work done 2026.03.05

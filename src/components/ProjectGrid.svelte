@@ -57,11 +57,14 @@
 
   const TASK_DATE_TOKEN_REGEX = /(?:🛫|📅|✅)\s*\d{4}-\d{2}-\d{2}/gu;
   const WIKI_LINK_REGEX = /\[\[([^\]]+)\]\]/gu;
+  const MARKDOWN_EXTERNAL_LINK_REGEX = /\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^)]+)\)/giu;
+  const EXTERNAL_URL_REGEX = /\b(?:https?:\/\/|mailto:)[^\s<>()]+/giu;
 
   interface CellSegment {
     text: string;
     linkReference: string | null;
     target: string | null;
+    externalUrl: string | null;
   }
 
   let { viewStore, variant } = $props<{ viewStore: ProjectViewStore; variant: ViewVariant }>();
@@ -329,6 +332,10 @@
 
   function hasChildProjects(path: string): boolean {
     return (childrenByParent.get(path)?.length ?? 0) > 0;
+  }
+
+  function hasExpandableTasks(project: ProjectNote): boolean {
+    return project.tasks.some((task) => task.state !== "checked");
   }
 
   function taskStatusForTask(task: ProjectTask): TaskStatusFilterOption {
@@ -853,44 +860,87 @@
     const segments: CellSegment[] = [];
     let cursor = 0;
 
-    WIKI_LINK_REGEX.lastIndex = 0;
-    for (const match of value.matchAll(WIKI_LINK_REGEX)) {
-      const start = match.index ?? 0;
-      const full = match[0];
-      const end = start + full.length;
+    while (cursor < value.length) {
+      const nextWiki = findRegexMatchFrom(WIKI_LINK_REGEX, value, cursor);
+      const nextMarkdownExternal = findRegexMatchFrom(MARKDOWN_EXTERNAL_LINK_REGEX, value, cursor);
+      const nextExternalUrl = findRegexMatchFrom(EXTERNAL_URL_REGEX, value, cursor);
+      const nextMatch = earliestSegmentMatch(nextWiki, nextMarkdownExternal, nextExternalUrl);
 
-      if (start > cursor) {
+      if (!nextMatch) {
         segments.push({
-          text: value.slice(cursor, start),
+          text: value.slice(cursor),
           linkReference: null,
           target: null,
+          externalUrl: null,
+        });
+        cursor = value.length;
+        break;
+      }
+
+      if (nextMatch.start > cursor) {
+        segments.push({
+          text: value.slice(cursor, nextMatch.start),
+          linkReference: null,
+          target: null,
+          externalUrl: null,
         });
       }
 
-      const parsed = parseWikiLink(full);
-      if (parsed) {
-        segments.push({
-          text: parsed.label,
-          linkReference: parsed.reference,
-          target: parsed.target,
-        });
+      if (nextMatch.type === "wiki") {
+        const parsed = parseWikiLink(nextMatch.text);
+        if (parsed) {
+          segments.push({
+            text: parsed.label,
+            linkReference: parsed.reference,
+            target: parsed.target,
+            externalUrl: null,
+          });
+        } else {
+          segments.push({
+            text: nextMatch.text,
+            linkReference: null,
+            target: null,
+            externalUrl: null,
+          });
+        }
+      } else if (nextMatch.type === "markdown-external") {
+        const [, labelRaw = "", hrefRaw = ""] = nextMatch.match;
+        const label = labelRaw.trim();
+        const href = hrefRaw.trim();
+        if (href.length > 0) {
+          segments.push({
+            text: label.length > 0 ? label : href,
+            linkReference: null,
+            target: null,
+            externalUrl: href,
+          });
+        } else {
+          segments.push({
+            text: nextMatch.text,
+            linkReference: null,
+            target: null,
+            externalUrl: null,
+          });
+        }
       } else {
+        const urlMatch = splitTrailingUrlPunctuation(nextMatch.text);
         segments.push({
-          text: full,
+          text: urlMatch.url,
           linkReference: null,
           target: null,
+          externalUrl: urlMatch.url,
         });
+        if (urlMatch.trailing.length > 0) {
+          segments.push({
+            text: urlMatch.trailing,
+            linkReference: null,
+            target: null,
+            externalUrl: null,
+          });
+        }
       }
 
-      cursor = end;
-    }
-
-    if (cursor < value.length) {
-      segments.push({
-        text: value.slice(cursor),
-        linkReference: null,
-        target: null,
-      });
+      cursor = nextMatch.end;
     }
 
     if (segments.length === 0) {
@@ -898,10 +948,80 @@
         text: value,
         linkReference: null,
         target: null,
+        externalUrl: null,
       });
     }
 
     return segments;
+  }
+
+  function findRegexMatchFrom(regex: RegExp, value: string, fromIndex: number): RegExpExecArray | null {
+    regex.lastIndex = fromIndex;
+    return regex.exec(value);
+  }
+
+  function earliestSegmentMatch(
+    wiki: RegExpExecArray | null,
+    markdownExternal: RegExpExecArray | null,
+    externalUrl: RegExpExecArray | null,
+  ):
+    | { type: "wiki" | "markdown-external" | "external-url"; start: number; end: number; text: string; match: RegExpExecArray }
+    | null {
+    const candidates: Array<{
+      type: "wiki" | "markdown-external" | "external-url";
+      start: number;
+      end: number;
+      text: string;
+      match: RegExpExecArray;
+    }> = [];
+
+    if (wiki && typeof wiki.index === "number") {
+      candidates.push({
+        type: "wiki",
+        start: wiki.index,
+        end: wiki.index + wiki[0].length,
+        text: wiki[0],
+        match: wiki,
+      });
+    }
+
+    if (markdownExternal && typeof markdownExternal.index === "number") {
+      candidates.push({
+        type: "markdown-external",
+        start: markdownExternal.index,
+        end: markdownExternal.index + markdownExternal[0].length,
+        text: markdownExternal[0],
+        match: markdownExternal,
+      });
+    }
+
+    if (externalUrl && typeof externalUrl.index === "number") {
+      candidates.push({
+        type: "external-url",
+        start: externalUrl.index,
+        end: externalUrl.index + externalUrl[0].length,
+        text: externalUrl[0],
+        match: externalUrl,
+      });
+    }
+
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    candidates.sort((left, right) => left.start - right.start);
+    return candidates[0];
+  }
+
+  function splitTrailingUrlPunctuation(value: string): { url: string; trailing: string } {
+    const match = value.match(/^(.*?)([.,!?;:]+)?$/u);
+    if (!match) {
+      return { url: value, trailing: "" };
+    }
+
+    const url = match[1] || value;
+    const trailing = match[2] || "";
+    return { url, trailing };
   }
 
   function handleCellLinkClick(event: MouseEvent, linkReference: string, sourcePath: string): void {
@@ -1221,7 +1341,7 @@
         {#each state.projects as project (project.path)}
           <tr>
             <td>
-              {#if project.tasks.length > 0}
+              {#if hasExpandableTasks(project)}
                 <button
                   type="button"
                   class="secondary"
@@ -1283,6 +1403,16 @@
                         >
                           {segment.text}
                         </a>
+                      {:else if segment.externalUrl}
+                        <a
+                          href={segment.externalUrl}
+                          class="opn-link"
+                          aria-label={`Open external link ${segment.text}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {segment.text}
+                        </a>
                       {:else}
                         {segment.text}
                       {/if}
@@ -1300,6 +1430,16 @@
                           class="opn-link"
                           aria-label={`Open requester link ${segment.text}`}
                           onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", project.path)}
+                        >
+                          {segment.text}
+                        </a>
+                      {:else if segment.externalUrl}
+                        <a
+                          href={segment.externalUrl}
+                          class="opn-link"
+                          aria-label={`Open external link ${segment.text}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
                         >
                           {segment.text}
                         </a>
@@ -1323,6 +1463,16 @@
                         >
                           {segment.text}
                         </a>
+                      {:else if segment.externalUrl}
+                        <a
+                          href={segment.externalUrl}
+                          class="opn-link"
+                          aria-label={`Open external link ${segment.text}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {segment.text}
+                        </a>
                       {:else}
                         {segment.text}
                       {/if}
@@ -1337,7 +1487,7 @@
             {/each}
           </tr>
 
-          {#if project.tasks.length > 0 && expandedProjects[project.path]}
+          {#if hasExpandableTasks(project) && expandedProjects[project.path]}
             <tr class="opn-row-detail">
               <td colspan={state.projectGridColumns.length + 1}>
                 <ul class="opn-task-list">
@@ -1427,6 +1577,16 @@
                         >
                           {segment.text}
                         </a>
+                      {:else if segment.externalUrl}
+                        <a
+                          href={segment.externalUrl}
+                          class="opn-link"
+                          aria-label={`Open external link ${segment.text}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {segment.text}
+                        </a>
                       {:else}
                         {segment.text}
                       {/if}
@@ -1447,6 +1607,16 @@
                         >
                           {segment.text}
                         </a>
+                      {:else if segment.externalUrl}
+                        <a
+                          href={segment.externalUrl}
+                          class="opn-link"
+                          aria-label={`Open external link ${segment.text}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {segment.text}
+                        </a>
                       {:else}
                         {segment.text}
                       {/if}
@@ -1464,6 +1634,16 @@
                           class="opn-link"
                           aria-label={`Open property link ${segment.text}`}
                           onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", project.path)}
+                        >
+                          {segment.text}
+                        </a>
+                      {:else if segment.externalUrl}
+                        <a
+                          href={segment.externalUrl}
+                          class="opn-link"
+                          aria-label={`Open external link ${segment.text}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
                         >
                           {segment.text}
                         </a>
@@ -1539,6 +1719,16 @@
                                     >
                                       {segment.text}
                                     </a>
+                                  {:else if segment.externalUrl}
+                                    <a
+                                      href={segment.externalUrl}
+                                      class="opn-link"
+                                      aria-label={`Open external link ${segment.text}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                    >
+                                      {segment.text}
+                                    </a>
                                   {:else}
                                     {segment.text}
                                   {/if}
@@ -1559,6 +1749,16 @@
                                     >
                                       {segment.text}
                                     </a>
+                                  {:else if segment.externalUrl}
+                                    <a
+                                      href={segment.externalUrl}
+                                      class="opn-link"
+                                      aria-label={`Open external link ${segment.text}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                    >
+                                      {segment.text}
+                                    </a>
                                   {:else}
                                     {segment.text}
                                   {/if}
@@ -1576,6 +1776,16 @@
                                       class="opn-link"
                                       aria-label={`Open property link ${segment.text}`}
                                       onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", child.path)}
+                                    >
+                                      {segment.text}
+                                    </a>
+                                  {:else if segment.externalUrl}
+                                    <a
+                                      href={segment.externalUrl}
+                                      class="opn-link"
+                                      aria-label={`Open external link ${segment.text}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
                                     >
                                       {segment.text}
                                     </a>
@@ -1655,6 +1865,16 @@
                         class="opn-link"
                         aria-label={`Open requester link ${segment.text}`}
                         onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", task.projectPath)}
+                      >
+                        {segment.text}
+                      </a>
+                    {:else if segment.externalUrl}
+                      <a
+                        href={segment.externalUrl}
+                        class="opn-link"
+                        aria-label={`Open external link ${segment.text}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
                       >
                         {segment.text}
                       </a>

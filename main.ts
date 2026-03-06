@@ -342,7 +342,7 @@ class ProjectNameModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
 
-    contentEl.createEl("h3", { text: "Create Project Note" });
+    contentEl.createEl("h1", { text: "Create Project Note" });
 
     const inputWrapper = contentEl.createDiv({ cls: "opn-modal-field" });
     inputWrapper.createEl("label", { text: "Filename", attr: { for: "opn-project-filename" } });
@@ -412,7 +412,7 @@ class AddTaskModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
 
-    contentEl.createEl("h3", { text: "Add Task" });
+    contentEl.createEl("h1", { text: "Add Task" });
 
     const projectWrapper = contentEl.createDiv({ cls: "opn-modal-field" });
     projectWrapper.createEl("label", { text: "Project", attr: { for: "opn-task-project-filter" } });
@@ -1567,6 +1567,10 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
     let area: AreaConfig | null = null;
     if (options.areaId) {
       area = this.settings.areas.find((candidate) => candidate.id === options.areaId) ?? null;
+    }
+
+    if (!area && this.settings.areas.length === 1) {
+      area = this.settings.areas[0];
     }
 
     if (!area) {

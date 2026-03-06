@@ -1,5 +1,14 @@
 # Release Notes
 
+## v0.0.3
+
+### Features
+- New project creation now skips Area selection when only one Area is configured.
+- Project property/link rendering now supports external links in text/list fields:
+  - markdown links (for example `[label](https://...)`)
+  - plain `https://...` and `mailto:...` links
+- Projects grid now hides task expand toggles when a project only contains completed tasks.
+
 ## v0.0.2
 
 ### Features
