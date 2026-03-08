@@ -21,6 +21,7 @@ import ProjectBoard from "./src/components/ProjectBoard.svelte";
 import {
   DEFAULT_SETTINGS,
   DEFAULT_VALUE_TOKENS,
+  KANBAN_CARD_BASE_FIELDS,
   LOCKED_PROPERTY_NAMES,
   PROJECT_PROPERTY_TYPE_OPTIONS,
   VIEW_TYPES,
@@ -38,6 +39,7 @@ import {
   isLockedPropertyName,
   normalizePropertyName,
   normalizePropertyType,
+  resolveAreaPropertyTemplates,
 } from "./src/lib/utils/properties";
 import type {
   AddTaskRequest,
@@ -104,6 +106,17 @@ const LEGACY_VIEW_DEFINITIONS: ViewDefinition[] = [
 
 const ALL_VIEW_DEFINITIONS = [...PRIMARY_VIEW_DEFINITIONS, ...LEGACY_VIEW_DEFINITIONS];
 const IN_PROGRESS_TASK_LINE_REGEX = /^\s*[-*+]\s+\[\/\]\s*/;
+const RESERVED_KANBAN_CARD_PROPERTY_KEYS = new Set<string>([
+  "aliases",
+  "status",
+  "priority",
+  "start-date",
+  "finish-date",
+  "due-date",
+  "tags",
+  "parent-project",
+  "requester",
+]);
 
 function createTriStateLineDecorationExtension() {
   const inProgressLine = Decoration.line({ class: "opn-task-in-progress-line" });
@@ -349,7 +362,6 @@ class ProjectNameModal extends Modal {
 
     this.inputComponent = new TextComponent(inputWrapper);
     this.inputComponent.inputEl.id = "opn-project-filename";
-    this.inputComponent.inputEl.setAttribute("aria-label", "Project note filename");
     this.inputComponent.setPlaceholder("Project name");
     this.inputComponent.inputEl.focus();
 
@@ -420,14 +432,12 @@ class AddTaskModal extends Modal {
 
     this.projectFilterInput = new TextComponent(projectPickerWrapper);
     this.projectFilterInput.inputEl.id = "opn-task-project-filter";
-    this.projectFilterInput.inputEl.setAttribute("aria-label", "Search projects");
     this.projectFilterInput.setPlaceholder("Search or choose project");
 
     this.projectPopoverEl = projectPickerWrapper.createDiv({ cls: "opn-task-project-popover is-hidden" });
     this.projectSelectEl = this.projectPopoverEl.createEl("select", {
       attr: {
         id: "opn-task-project",
-        "aria-label": "Project options",
       },
     });
     this.projectSelectEl.addClass("opn-task-project-select");
@@ -493,7 +503,6 @@ class AddTaskModal extends Modal {
     taskWrapper.createEl("label", { text: "Task", attr: { for: "opn-task-text" } });
     this.taskInput = new TextComponent(taskWrapper);
     this.taskInput.inputEl.id = "opn-task-text";
-    this.taskInput.inputEl.setAttribute("aria-label", "Task text");
     this.taskInput.setPlaceholder("Task description");
 
     const startWrapper = contentEl.createDiv({ cls: "opn-modal-field" });
@@ -503,7 +512,6 @@ class AddTaskModal extends Modal {
         id: "opn-task-start-date",
         type: "date",
         value: todayIsoDate(),
-        "aria-label": "Task start date",
       },
     });
 
@@ -513,7 +521,6 @@ class AddTaskModal extends Modal {
       attr: {
         id: "opn-task-due-date",
         type: "date",
-        "aria-label": "Task due date",
       },
     });
 
@@ -815,6 +822,7 @@ class ProjectNotesSettingTab extends PluginSettingTab {
           .addOption("project", "Project")
           .addOption("status", "Status")
           .addOption("priority", "Priority")
+          .addOption("timing-status", "Timing Status")
           .addOption("start-date", "Start Date")
           .addOption("finish-date", "Finish Date")
           .addOption("due-date", "Due Date")
@@ -847,6 +855,71 @@ class ProjectNotesSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings({ reconcile: false });
         });
       });
+
+    new Setting(containerEl)
+      .setName("Kanban default next task count")
+      .setDesc("Default number of incomplete tasks shown in the `Next Task(s)` card field.")
+      .addText((text) => {
+        text
+          .setPlaceholder("1")
+          .setValue(String(this.plugin.settings.kanbanCardDefaultNextTaskCount))
+          .onChange(async (value) => {
+            const parsed = Number(value);
+            if (!Number.isFinite(parsed) || parsed < 1) {
+              return;
+            }
+
+            this.plugin.settings.kanbanCardDefaultNextTaskCount = Math.max(1, Math.floor(parsed));
+            await this.plugin.saveSettings({ reconcile: false });
+          });
+      });
+
+    new Setting(containerEl)
+      .setName("Kanban notes preview words")
+      .setDesc("Word count used for collapsed Notes text in Kanban cards before `Read More`.")
+      .addText((text) => {
+        text
+          .setPlaceholder("100")
+          .setValue(String(this.plugin.settings.kanbanNotesPreviewWords))
+          .onChange(async (value) => {
+            const parsed = Number(value);
+            if (!Number.isFinite(parsed) || parsed < 1) {
+              return;
+            }
+
+            this.plugin.settings.kanbanNotesPreviewWords = Math.max(1, Math.floor(parsed));
+            await this.plugin.saveSettings({ reconcile: false });
+          });
+      });
+
+    new Setting(containerEl)
+      .setName("Kanban notes preview lines")
+      .setDesc("Line count used for collapsed Notes text in Kanban cards before `Read More`.")
+      .addText((text) => {
+        text
+          .setPlaceholder("5")
+          .setValue(String(this.plugin.settings.kanbanNotesPreviewLines))
+          .onChange(async (value) => {
+            const parsed = Number(value);
+            if (!Number.isFinite(parsed) || parsed < 1) {
+              return;
+            }
+
+            this.plugin.settings.kanbanNotesPreviewLines = Math.max(1, Math.floor(parsed));
+            await this.plugin.saveSettings({ reconcile: false });
+          });
+      });
+
+    this.renderKanbanCardFieldSettings({
+      containerEl,
+      heading: "Kanban default card fields",
+      area: null,
+      selectedFieldIds: this.plugin.settings.kanbanCardDefaultFieldIds,
+      onFieldIdsChange: async (fieldIds) => {
+        this.plugin.settings.kanbanCardDefaultFieldIds = fieldIds;
+        await this.plugin.saveSettings({ reconcile: false });
+      },
+    });
 
     new Setting(containerEl)
       .setName("Reconcile interval (minutes)")
@@ -1006,6 +1079,70 @@ class ProjectNotesSettingTab extends PluginSettingTab {
         },
       });
 
+      const hasKanbanCardFieldOverride =
+        Array.isArray(this.plugin.settings.kanbanCardFieldsByArea[area.id]) &&
+        this.plugin.settings.kanbanCardFieldsByArea[area.id].length > 0;
+      const hasKanbanNextTaskCountOverride = typeof this.plugin.settings.kanbanCardNextTaskCountByArea[area.id] === "number";
+      const hasKanbanCardOverride = hasKanbanCardFieldOverride || hasKanbanNextTaskCountOverride;
+
+      new Setting(areaSettingsEl)
+        .setName("Override Kanban card settings")
+        .setDesc("When enabled, this Area uses its own Kanban card field selection and next-task count.")
+        .addToggle((toggle) => {
+          toggle.setValue(hasKanbanCardOverride).onChange(async (value) => {
+            if (value) {
+              if (!this.plugin.settings.kanbanCardFieldsByArea[area.id] || this.plugin.settings.kanbanCardFieldsByArea[area.id].length === 0) {
+                this.plugin.settings.kanbanCardFieldsByArea[area.id] = [...this.plugin.settings.kanbanCardDefaultFieldIds];
+              }
+
+              if (
+                !Number.isFinite(this.plugin.settings.kanbanCardNextTaskCountByArea[area.id]) ||
+                this.plugin.settings.kanbanCardNextTaskCountByArea[area.id] < 1
+              ) {
+                this.plugin.settings.kanbanCardNextTaskCountByArea[area.id] = this.plugin.settings.kanbanCardDefaultNextTaskCount;
+              }
+            } else {
+              delete this.plugin.settings.kanbanCardFieldsByArea[area.id];
+              delete this.plugin.settings.kanbanCardNextTaskCountByArea[area.id];
+            }
+
+            await this.plugin.saveSettings({ reconcile: false });
+            this.display();
+          });
+        });
+
+      if (hasKanbanCardOverride) {
+        const areaNextTaskCountOverride = this.plugin.settings.kanbanCardNextTaskCountByArea[area.id];
+        this.renderKanbanCardFieldSettings({
+          containerEl: areaSettingsEl,
+          heading: "Kanban card field overrides",
+          area,
+          selectedFieldIds: this.plugin.settings.kanbanCardFieldsByArea[area.id] ?? this.plugin.settings.kanbanCardDefaultFieldIds,
+          onFieldIdsChange: async (fieldIds) => {
+            this.plugin.settings.kanbanCardFieldsByArea[area.id] = fieldIds;
+            await this.plugin.saveSettings({ reconcile: false });
+          },
+        });
+
+        new Setting(areaSettingsEl)
+          .setName("Kanban next task count override")
+          .setDesc("Area-specific number of incomplete tasks shown in `Next Task(s)`.")
+          .addText((text) => {
+            text
+              .setPlaceholder(String(this.plugin.settings.kanbanCardDefaultNextTaskCount))
+              .setValue(String(Number.isFinite(areaNextTaskCountOverride) ? areaNextTaskCountOverride : this.plugin.settings.kanbanCardDefaultNextTaskCount))
+              .onChange(async (value) => {
+                const parsed = Number(value);
+                if (!Number.isFinite(parsed) || parsed < 1) {
+                  return;
+                }
+
+                this.plugin.settings.kanbanCardNextTaskCountByArea[area.id] = Math.max(1, Math.floor(parsed));
+                await this.plugin.saveSettings({ reconcile: false });
+              });
+          });
+      }
+
       new Setting(areaSettingsEl)
         .setName("Remove Area")
         .addButton((button) => {
@@ -1014,6 +1151,9 @@ class ProjectNotesSettingTab extends PluginSettingTab {
             .setWarning()
             .onClick(async () => {
               this.plugin.settings.areas = this.plugin.settings.areas.filter((candidate) => candidate.id !== area.id);
+              delete this.plugin.settings.gridColumnsByArea[area.id];
+              delete this.plugin.settings.kanbanCardFieldsByArea[area.id];
+              delete this.plugin.settings.kanbanCardNextTaskCountByArea[area.id];
               await this.plugin.saveSettings();
               this.display();
             });
@@ -1131,6 +1271,93 @@ class ProjectNotesSettingTab extends PluginSettingTab {
       });
   }
 
+  private renderKanbanCardFieldSettings(options: {
+    containerEl: HTMLElement;
+    heading: string;
+    area: AreaConfig | null;
+    selectedFieldIds: string[];
+    onFieldIdsChange: (fieldIds: string[]) => Promise<void>;
+  }): void {
+    const sectionEl = options.containerEl.createDiv({ cls: "opn-area-setting" });
+    sectionEl.createEl("h4", { text: options.heading });
+
+    const availableFields = this.buildKanbanCardFieldOptions(options.area);
+    const normalizedSelection = this.normalizeKanbanCardFieldSelection(options.selectedFieldIds, availableFields);
+    const selected = new Set(normalizedSelection);
+
+    for (const field of availableFields) {
+      new Setting(sectionEl)
+        .setName(field.label)
+        .setDesc(field.id === "name" ? "Always visible" : "")
+        .addToggle((toggle) => {
+          toggle
+            .setValue(selected.has(field.id))
+            .setDisabled(field.id === "name")
+            .onChange(async (visible) => {
+              if (field.id === "name") {
+                return;
+              }
+
+              if (visible) {
+                selected.add(field.id);
+              } else {
+                selected.delete(field.id);
+              }
+              selected.add("name");
+
+              const ordered = availableFields
+                .map((candidate) => candidate.id)
+                .filter((candidate) => selected.has(candidate));
+
+              await options.onFieldIdsChange(ordered);
+            });
+        });
+    }
+  }
+
+  private buildKanbanCardFieldOptions(area: AreaConfig | null): Array<{ id: string; label: string }> {
+    const options = KANBAN_CARD_BASE_FIELDS.map((field) => ({ id: field.id, label: field.label }));
+    const seen = new Set(options.map((option) => option.id));
+
+    for (const template of resolveAreaPropertyTemplates(this.plugin.settings, area)) {
+      const canonical = canonicalPropertyName(template.name);
+      if (RESERVED_KANBAN_CARD_PROPERTY_KEYS.has(canonical)) {
+        continue;
+      }
+
+      const id = `property:${canonical}`;
+      if (seen.has(id)) {
+        continue;
+      }
+
+      options.push({
+        id,
+        label: template.name,
+      });
+      seen.add(id);
+    }
+
+    return options;
+  }
+
+  private normalizeKanbanCardFieldSelection(
+    fieldIds: string[],
+    availableFields: Array<{ id: string; label: string }>,
+  ): string[] {
+    const available = new Set(availableFields.map((field) => field.id));
+    const selected = new Set<string>();
+    for (const fieldId of fieldIds) {
+      if (available.has(fieldId)) {
+        selected.add(fieldId);
+      }
+    }
+    selected.add("name");
+
+    return availableFields
+      .map((field) => field.id)
+      .filter((fieldId) => selected.has(fieldId));
+  }
+
   private hasDuplicatePropertyName(templates: ProjectPropertyTemplate[], currentIndex: number, nextName: string): boolean {
     const target = canonicalPropertyName(nextName);
     return templates.some((template, index) => {
@@ -1178,6 +1405,12 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
     priorities: [...DEFAULT_SETTINGS.priorities],
     defaultProperties: DEFAULT_SETTINGS.defaultProperties.map((property) => ({ ...property })),
     gridColumnsByArea: { ...DEFAULT_SETTINGS.gridColumnsByArea },
+    kanbanCardDefaultFieldIds: [...DEFAULT_SETTINGS.kanbanCardDefaultFieldIds],
+    kanbanCardFieldsByArea: { ...DEFAULT_SETTINGS.kanbanCardFieldsByArea },
+    kanbanCardDefaultNextTaskCount: DEFAULT_SETTINGS.kanbanCardDefaultNextTaskCount,
+    kanbanCardNextTaskCountByArea: { ...DEFAULT_SETTINGS.kanbanCardNextTaskCountByArea },
+    kanbanNotesPreviewWords: DEFAULT_SETTINGS.kanbanNotesPreviewWords,
+    kanbanNotesPreviewLines: DEFAULT_SETTINGS.kanbanNotesPreviewLines,
     enableTriStateCheckboxes: DEFAULT_SETTINGS.enableTriStateCheckboxes,
     defaultProjectStatuses: [...DEFAULT_SETTINGS.defaultProjectStatuses],
     kanbanHiddenStatuses: [...DEFAULT_SETTINGS.kanbanHiddenStatuses],

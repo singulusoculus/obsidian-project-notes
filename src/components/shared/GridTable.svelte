@@ -64,7 +64,7 @@
   }
 </script>
 
-<table class="opn-table" aria-label={ariaLabel}>
+<table class="opn-table">
   <thead>
     <tr>
       {#if showLeadingColumn}

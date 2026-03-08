@@ -48,6 +48,72 @@ function normalizeGridColumnsByArea(value: unknown): Record<string, string[]> {
   return normalized;
 }
 
+function normalizeStringListRecord(value: unknown): Record<string, string[]> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const normalized: Record<string, string[]> = {};
+  for (const [key, candidate] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof key !== "string" || key.trim().length === 0 || !Array.isArray(candidate)) {
+      continue;
+    }
+
+    const entries = candidate
+      .map((entry) => String(entry).trim())
+      .filter((entry) => entry.length > 0);
+
+    if (entries.length > 0) {
+      normalized[key] = Array.from(new Set(entries));
+    }
+  }
+
+  return normalized;
+}
+
+function normalizePositiveInteger(value: unknown, fallback: number, minimum = 1): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  const integer = Math.floor(parsed);
+  if (integer < minimum) {
+    return fallback;
+  }
+
+  return integer;
+}
+
+function normalizeNumberRecord(value: unknown, minimum = 1): Record<string, number> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const normalized: Record<string, number> = {};
+  for (const [key, candidate] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof key !== "string" || key.trim().length === 0) {
+      continue;
+    }
+
+    const parsed = normalizePositiveInteger(candidate, -1, minimum);
+    if (parsed >= minimum) {
+      normalized[key] = parsed;
+    }
+  }
+
+  return normalized;
+}
+
+function normalizeKanbanCardFieldIds(values: unknown, fallback: string[]): string[] {
+  const parsed = normalizeList(values, fallback);
+  const deduped = Array.from(new Set(parsed));
+  if (!deduped.includes("name")) {
+    deduped.unshift("name");
+  }
+  return deduped;
+}
+
 function normalizeArea(rawArea: Partial<AreaConfig>): AreaConfig | null {
   if (!rawArea.folderPath || !rawArea.name) {
     return null;
@@ -97,6 +163,7 @@ function normalizeSortBy(value: unknown): ProjectSettings["defaultSortBy"] {
     value === "project" ||
     value === "status" ||
     value === "priority" ||
+    value === "timing-status" ||
     value === "start-date" ||
     value === "finish-date" ||
     value === "due-date" ||
@@ -168,6 +235,10 @@ export function makeNewArea(): AreaConfig {
 }
 
 export function parseSettings(data: Partial<ProjectSettings> | undefined): ProjectSettings {
+  const defaultKanbanCardFieldIds = normalizeKanbanCardFieldIds(
+    DEFAULT_SETTINGS.kanbanCardDefaultFieldIds,
+    DEFAULT_SETTINGS.kanbanCardDefaultFieldIds,
+  );
   const merged: ProjectSettings = {
     ...DEFAULT_SETTINGS,
     ...(data ?? {}),
@@ -176,6 +247,16 @@ export function parseSettings(data: Partial<ProjectSettings> | undefined): Proje
     priorities: normalizeList(data?.priorities, DEFAULT_SETTINGS.priorities),
     defaultProperties: normalizePropertyTemplateList(data?.defaultProperties, DEFAULT_SETTINGS.defaultProperties),
     gridColumnsByArea: normalizeGridColumnsByArea(data?.gridColumnsByArea),
+    kanbanCardDefaultFieldIds: normalizeKanbanCardFieldIds(data?.kanbanCardDefaultFieldIds, defaultKanbanCardFieldIds),
+    kanbanCardFieldsByArea: normalizeStringListRecord(data?.kanbanCardFieldsByArea),
+    kanbanCardDefaultNextTaskCount: normalizePositiveInteger(
+      data?.kanbanCardDefaultNextTaskCount,
+      DEFAULT_SETTINGS.kanbanCardDefaultNextTaskCount,
+      1,
+    ),
+    kanbanCardNextTaskCountByArea: normalizeNumberRecord(data?.kanbanCardNextTaskCountByArea, 1),
+    kanbanNotesPreviewWords: normalizePositiveInteger(data?.kanbanNotesPreviewWords, DEFAULT_SETTINGS.kanbanNotesPreviewWords, 1),
+    kanbanNotesPreviewLines: normalizePositiveInteger(data?.kanbanNotesPreviewLines, DEFAULT_SETTINGS.kanbanNotesPreviewLines, 1),
     enableTriStateCheckboxes: normalizeBoolean(data?.enableTriStateCheckboxes, DEFAULT_SETTINGS.enableTriStateCheckboxes),
     startupView: normalizeStartupView(data?.startupView),
     defaultProjectStatuses: normalizeList(data?.defaultProjectStatuses, DEFAULT_SETTINGS.defaultProjectStatuses),
@@ -190,6 +271,16 @@ export function parseSettings(data: Partial<ProjectSettings> | undefined): Proje
     .filter((area): area is AreaConfig => area !== null);
 
   merged.areas = normalizedAreas;
+
+  for (const area of merged.areas) {
+    const override = merged.kanbanCardFieldsByArea[area.id];
+    if (!override || override.length === 0) {
+      continue;
+    }
+
+    const normalizedOverride = normalizeKanbanCardFieldIds(override, merged.kanbanCardDefaultFieldIds);
+    merged.kanbanCardFieldsByArea[area.id] = normalizedOverride;
+  }
 
   if (merged.cacheReconcileMinutes <= 0 || !Number.isFinite(merged.cacheReconcileMinutes)) {
     merged.cacheReconcileMinutes = DEFAULT_SETTINGS.cacheReconcileMinutes;

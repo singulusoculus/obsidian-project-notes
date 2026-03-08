@@ -18,10 +18,22 @@ export type ViewVariant = "default";
 export type SortDirection = "asc" | "desc";
 export type ProjectPropertyType = "text" | "number" | "checkbox" | "date" | "datetime" | "multitext" | "tags" | "aliases";
 export type TaskState = "unchecked" | "in-progress" | "checked";
+export type KanbanCardBaseFieldId =
+  | "name"
+  | "priority"
+  | "timing-status"
+  | "start-date"
+  | "due-date"
+  | "finish-date"
+  | "requester"
+  | "count-tasks"
+  | "next-tasks"
+  | "notes";
 export type ProjectGridBaseColumnId =
   | "project"
   | "status"
   | "priority"
+  | "timing-status"
   | "start-date"
   | "finish-date"
   | "due-date"
@@ -38,6 +50,13 @@ export interface ProjectGridColumn {
   propertyKey?: string;
 }
 
+export interface KanbanCardField {
+  id: string;
+  label: string;
+  kind: "base" | "property";
+  propertyKey?: string;
+}
+
 export interface ProjectPropertyTemplate {
   name: string;
   type: ProjectPropertyType;
@@ -48,6 +67,7 @@ export type ProjectSortField =
   | "project"
   | "status"
   | "priority"
+  | "timing-status"
   | "start-date"
   | "finish-date"
   | "due-date"
@@ -73,6 +93,12 @@ export interface ProjectSettings {
   priorities: string[];
   defaultProperties: ProjectPropertyTemplate[];
   gridColumnsByArea: Record<string, string[]>;
+  kanbanCardDefaultFieldIds: string[];
+  kanbanCardFieldsByArea: Record<string, string[]>;
+  kanbanCardDefaultNextTaskCount: number;
+  kanbanCardNextTaskCountByArea: Record<string, number>;
+  kanbanNotesPreviewWords: number;
+  kanbanNotesPreviewLines: number;
   enableTriStateCheckboxes: boolean;
   startupView: StartupView;
   openTarget: OpenTarget;
@@ -115,6 +141,7 @@ export interface ProjectNote {
   parentProject: string | null;
   requester: string[];
   customProperties: Record<string, string>;
+  notesSectionText: string;
   createdAt: number;
   updatedAt: number;
   tasks: ProjectTask[];
@@ -160,6 +187,11 @@ export interface ProjectViewState {
   availableAreaTags: string[];
   availableProjectGridColumns: ProjectGridColumn[];
   projectGridColumns: ProjectGridColumn[];
+  availableKanbanCardFields: KanbanCardField[];
+  kanbanCardFields: KanbanCardField[];
+  kanbanNextTaskCount: number;
+  kanbanNotesPreviewWords: number;
+  kanbanNotesPreviewLines: number;
   sortBy: ProjectSortField;
   sortDirection: SortDirection;
   projects: ProjectNote[];

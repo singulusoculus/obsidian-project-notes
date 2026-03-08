@@ -409,6 +409,45 @@
     return timing;
   }
 
+  function projectTimingStatuses(project: ProjectNote): TaskTimingFilterOption[] {
+    const timing: TaskTimingFilterOption[] = [];
+    const today = relativeLocalIsoDate(0);
+    const tomorrow = relativeLocalIsoDate(1);
+    const terminalStatus = isTerminalProjectStatus(project.status) || Boolean(project.finishDate);
+
+    if (
+      !terminalStatus &&
+      project.startDate &&
+      project.dueDate &&
+      project.startDate <= today &&
+      today <= project.dueDate
+    ) {
+      timing.push("Current");
+    }
+
+    if (!terminalStatus && project.dueDate === today) {
+      timing.push("Due");
+    }
+
+    if (!terminalStatus && project.dueDate && today > project.dueDate) {
+      timing.push("Overdue");
+    }
+
+    if (!terminalStatus && project.startDate === tomorrow) {
+      timing.push("Tomorrow");
+    }
+
+    if (!terminalStatus && project.startDate && project.startDate > tomorrow) {
+      timing.push("Future");
+    }
+
+    if (!terminalStatus && !project.startDate && !project.dueDate) {
+      timing.push("Needs Timing");
+    }
+
+    return timing;
+  }
+
   function shouldShowTask(task: ProjectTask): boolean {
     return selectedTaskStatusSet.has(taskStatusForTask(task));
   }
@@ -1093,7 +1132,7 @@
 </script>
 
 <div class={`opn-grid opn-${variant}`}>
-  <section class="opn-grid-controls" aria-label="Grid controls">
+  <section class="opn-grid-controls">
     {#if state.gridTab === "projects"}
       <div class="opn-grid-filter-row opn-projects-controls">
         <div class="opn-grid-filter-left">
@@ -1123,7 +1162,7 @@
             </button>
 
             {#if showStatusPicker}
-              <div class="opn-multiselect-menu" role="dialog" aria-label="Status filter options">
+              <div class="opn-multiselect-menu" role="dialog">
                 <div class="opn-multiselect-actions">
                   <button type="button" class="secondary opn-multiselect-action" onclick={handleStatusSelectAll}>
                     All
@@ -1158,7 +1197,7 @@
             </button>
 
             {#if showPriorityPicker}
-              <div class="opn-multiselect-menu" role="dialog" aria-label="Priority filter options">
+              <div class="opn-multiselect-menu" role="dialog">
                 <div class="opn-multiselect-actions">
                   <button type="button" class="secondary opn-multiselect-action" onclick={handlePrioritySelectAll}>
                     All
@@ -1201,7 +1240,7 @@
             </button>
 
             {#if showTaskStatusPicker}
-              <div class="opn-multiselect-menu" role="dialog" aria-label="Task status filter options">
+              <div class="opn-multiselect-menu" role="dialog">
                 <div class="opn-multiselect-actions">
                   <button type="button" class="secondary opn-multiselect-action" onclick={handleTaskStatusSelectAll}>
                     All
@@ -1260,7 +1299,7 @@
             </button>
 
             {#if showTaskStatusPicker}
-              <div class="opn-multiselect-menu" role="dialog" aria-label="Task status filter options">
+              <div class="opn-multiselect-menu" role="dialog">
                 <div class="opn-multiselect-actions">
                   <button type="button" class="secondary opn-multiselect-action" onclick={handleTaskStatusSelectAll}>
                     All
@@ -1295,7 +1334,7 @@
             </button>
 
             {#if showTaskTimingPicker}
-              <div class="opn-multiselect-menu" role="dialog" aria-label="Timing status filter options">
+              <div class="opn-multiselect-menu" role="dialog">
                 <div class="opn-multiselect-actions">
                   <button type="button" class="secondary opn-multiselect-action" onclick={handleTaskTimingSelectAll}>
                     All
@@ -1345,7 +1384,6 @@
                 <button
                   type="button"
                   class="secondary"
-                  aria-label={`Toggle tasks for ${project.displayName}`}
                   onclick={() => toggleExpand(project.path)}
                 >
                   {expandedProjects[project.path] ? "▾" : "▸"}
@@ -1358,7 +1396,6 @@
                   <a
                     href={encodeURI(project.path)}
                     class="opn-link"
-                    aria-label={`Open project note ${project.displayName}`}
                     onclick={(event) => handleProjectLinkClick(event, project.path)}
                   >
                     {project.displayName}
@@ -1389,6 +1426,19 @@
                   {project.finishDate ?? ""}
                 {:else if column.id === "due-date"}
                   {project.dueDate ?? ""}
+                {:else if column.id === "timing-status"}
+                  {@const timingStatuses = projectTimingStatuses(project)}
+                  {#if timingStatuses.length > 0}
+                    <div class="opn-task-timing-badges">
+                      {#each timingStatuses as timing (timing)}
+                        <span class={`opn-task-timing-badge opn-task-timing-${badgeToken(timing)}`}>
+                          {timing}
+                        </span>
+                      {/each}
+                    </div>
+                  {:else}
+                    {""}
+                  {/if}
                 {:else if column.id === "tags"}
                   {project.tags.join(", ")}
                 {:else if column.id === "parent-project"}
@@ -1398,7 +1448,6 @@
                         <a
                           href={encodeURI(segment.target ?? "")}
                           class="opn-link"
-                          aria-label={`Open parent project ${segment.text}`}
                           onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", project.path)}
                         >
                           {segment.text}
@@ -1407,7 +1456,6 @@
                         <a
                           href={segment.externalUrl}
                           class="opn-link"
-                          aria-label={`Open external link ${segment.text}`}
                           target="_blank"
                           rel="noopener noreferrer"
                         >
@@ -1428,7 +1476,6 @@
                         <a
                           href={encodeURI(segment.target ?? "")}
                           class="opn-link"
-                          aria-label={`Open requester link ${segment.text}`}
                           onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", project.path)}
                         >
                           {segment.text}
@@ -1437,7 +1484,6 @@
                         <a
                           href={segment.externalUrl}
                           class="opn-link"
-                          aria-label={`Open external link ${segment.text}`}
                           target="_blank"
                           rel="noopener noreferrer"
                         >
@@ -1458,7 +1504,6 @@
                         <a
                           href={encodeURI(segment.target ?? "")}
                           class="opn-link"
-                          aria-label={`Open property link ${segment.text}`}
                           onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", project.path)}
                         >
                           {segment.text}
@@ -1467,7 +1512,6 @@
                         <a
                           href={segment.externalUrl}
                           class="opn-link"
-                          aria-label={`Open external link ${segment.text}`}
                           target="_blank"
                           rel="noopener noreferrer"
                         >
@@ -1497,7 +1541,6 @@
                         <input
                           type="checkbox"
                           class="opn-task-checkbox"
-                          aria-label={`Toggle task ${getTaskDisplayText(task)}`}
                           checked={task.state === "checked"}
                           use:checkboxVisualState={task.state}
                           onclick={(event) => handleTaskCheckboxClick(event, task)}
@@ -1519,7 +1562,6 @@
                 <button
                   type="button"
                   class="secondary"
-                  aria-label={`Toggle children for ${project.displayName}`}
                   onclick={() => toggleParentChildren(project.path)}
                 >
                   {expandedParentProjects[project.path] ? "▾" : "▸"}
@@ -1532,7 +1574,6 @@
                   <a
                     href={encodeURI(project.path)}
                     class="opn-link"
-                    aria-label={`Open project note ${project.displayName}`}
                     onclick={(event) => handleProjectLinkClick(event, project.path)}
                   >
                     {project.displayName}
@@ -1563,6 +1604,19 @@
                   {project.finishDate ?? ""}
                 {:else if column.id === "due-date"}
                   {project.dueDate ?? ""}
+                {:else if column.id === "timing-status"}
+                  {@const timingStatuses = projectTimingStatuses(project)}
+                  {#if timingStatuses.length > 0}
+                    <div class="opn-task-timing-badges">
+                      {#each timingStatuses as timing (timing)}
+                        <span class={`opn-task-timing-badge opn-task-timing-${badgeToken(timing)}`}>
+                          {timing}
+                        </span>
+                      {/each}
+                    </div>
+                  {:else}
+                    {""}
+                  {/if}
                 {:else if column.id === "tags"}
                   {project.tags.join(", ")}
                 {:else if column.id === "parent-project"}
@@ -1572,7 +1626,6 @@
                         <a
                           href={encodeURI(segment.target ?? "")}
                           class="opn-link"
-                          aria-label={`Open parent project ${segment.text}`}
                           onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", project.path)}
                         >
                           {segment.text}
@@ -1581,7 +1634,6 @@
                         <a
                           href={segment.externalUrl}
                           class="opn-link"
-                          aria-label={`Open external link ${segment.text}`}
                           target="_blank"
                           rel="noopener noreferrer"
                         >
@@ -1602,7 +1654,6 @@
                         <a
                           href={encodeURI(segment.target ?? "")}
                           class="opn-link"
-                          aria-label={`Open requester link ${segment.text}`}
                           onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", project.path)}
                         >
                           {segment.text}
@@ -1611,7 +1662,6 @@
                         <a
                           href={segment.externalUrl}
                           class="opn-link"
-                          aria-label={`Open external link ${segment.text}`}
                           target="_blank"
                           rel="noopener noreferrer"
                         >
@@ -1632,7 +1682,6 @@
                         <a
                           href={encodeURI(segment.target ?? "")}
                           class="opn-link"
-                          aria-label={`Open property link ${segment.text}`}
                           onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", project.path)}
                         >
                           {segment.text}
@@ -1641,7 +1690,6 @@
                         <a
                           href={segment.externalUrl}
                           class="opn-link"
-                          aria-label={`Open external link ${segment.text}`}
                           target="_blank"
                           rel="noopener noreferrer"
                         >
@@ -1664,7 +1712,7 @@
           {#if hasChildProjects(project.path) && expandedParentProjects[project.path]}
             <tr class="opn-row-detail">
               <td colspan={state.projectGridColumns.length + 1}>
-                <table class="opn-table opn-child-table" aria-label={`Children for ${project.displayName}`}>
+                <table class="opn-table opn-child-table">
                   <tbody>
                     {#each childrenByParent.get(project.path) ?? [] as child (child.path)}
                       <tr>
@@ -1674,7 +1722,6 @@
                               <a
                                 href={encodeURI(child.path)}
                                 class="opn-link"
-                                aria-label={`Open project note ${child.displayName}`}
                                 onclick={(event) => handleProjectLinkClick(event, child.path)}
                               >
                                 {child.displayName}
@@ -1705,6 +1752,19 @@
                               {child.finishDate ?? ""}
                             {:else if column.id === "due-date"}
                               {child.dueDate ?? ""}
+                            {:else if column.id === "timing-status"}
+                              {@const timingStatuses = projectTimingStatuses(child)}
+                              {#if timingStatuses.length > 0}
+                                <div class="opn-task-timing-badges">
+                                  {#each timingStatuses as timing (timing)}
+                                    <span class={`opn-task-timing-badge opn-task-timing-${badgeToken(timing)}`}>
+                                      {timing}
+                                    </span>
+                                  {/each}
+                                </div>
+                              {:else}
+                                {""}
+                              {/if}
                             {:else if column.id === "tags"}
                               {child.tags.join(", ")}
                             {:else if column.id === "parent-project"}
@@ -1714,7 +1774,6 @@
                                     <a
                                       href={encodeURI(segment.target ?? "")}
                                       class="opn-link"
-                                      aria-label={`Open parent project ${segment.text}`}
                                       onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", child.path)}
                                     >
                                       {segment.text}
@@ -1723,7 +1782,6 @@
                                     <a
                                       href={segment.externalUrl}
                                       class="opn-link"
-                                      aria-label={`Open external link ${segment.text}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                     >
@@ -1744,7 +1802,6 @@
                                     <a
                                       href={encodeURI(segment.target ?? "")}
                                       class="opn-link"
-                                      aria-label={`Open requester link ${segment.text}`}
                                       onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", child.path)}
                                     >
                                       {segment.text}
@@ -1753,7 +1810,6 @@
                                     <a
                                       href={segment.externalUrl}
                                       class="opn-link"
-                                      aria-label={`Open external link ${segment.text}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                     >
@@ -1774,7 +1830,6 @@
                                     <a
                                       href={encodeURI(segment.target ?? "")}
                                       class="opn-link"
-                                      aria-label={`Open property link ${segment.text}`}
                                       onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", child.path)}
                                     >
                                       {segment.text}
@@ -1783,7 +1838,6 @@
                                     <a
                                       href={segment.externalUrl}
                                       class="opn-link"
-                                      aria-label={`Open external link ${segment.text}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                     >
@@ -1830,7 +1884,6 @@
             <td>
               {#if column.id === "done"}
                 <input
-                  aria-label={`Toggle task ${getTaskDisplayText(task)}`}
                   type="checkbox"
                   class="opn-task-checkbox"
                   checked={task.state === "checked"}
@@ -1841,7 +1894,6 @@
                 <a
                   href={encodeURI(task.projectPath)}
                   class="opn-link"
-                  aria-label={`Open project note ${task.projectName}`}
                   onclick={(event) => handleTaskLinkClick(event, task)}
                 >
                   {getTaskDisplayText(task)}
@@ -1850,7 +1902,6 @@
                 <a
                   href={encodeURI(task.projectPath)}
                   class="opn-link"
-                  aria-label={`Open project note ${task.projectName}`}
                   onclick={(event) => handleProjectLinkClick(event, task.projectPath)}
                 >
                   {task.projectName}
@@ -1863,7 +1914,6 @@
                       <a
                         href={encodeURI(segment.target ?? "")}
                         class="opn-link"
-                        aria-label={`Open requester link ${segment.text}`}
                         onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", task.projectPath)}
                       >
                         {segment.text}
@@ -1872,7 +1922,6 @@
                       <a
                         href={segment.externalUrl}
                         class="opn-link"
-                        aria-label={`Open external link ${segment.text}`}
                         target="_blank"
                         rel="noopener noreferrer"
                       >

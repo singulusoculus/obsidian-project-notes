@@ -1,7 +1,8 @@
 import { get, writable, type Writable } from "svelte/store";
-import { FILTER_NONE_TOKEN, PROJECT_GRID_BASE_COLUMNS } from "../constants";
+import { FILTER_NONE_TOKEN, KANBAN_CARD_BASE_FIELDS, PROJECT_GRID_BASE_COLUMNS } from "../constants";
 import type {
   BoardType,
+  KanbanCardField,
   ProjectGridColumn,
   ProjectMetadataUpdate,
   ProjectSettings,
@@ -69,6 +70,8 @@ export class ProjectViewStore {
     const initialArea = this.resolveInitialAreaId(dependencies.initialAreaId, settings);
     const initialAreaConfig = settings.areas.find((area) => area.id === initialArea) ?? null;
     const initialGridColumns = this.resolveGridColumns(settings, initialArea, initialAreaConfig);
+    const initialKanbanCardFields = this.resolveKanbanCardFields(settings, initialArea, initialAreaConfig);
+    const initialKanbanNextTaskCount = this.resolveKanbanNextTaskCount(settings, initialArea);
     const initialGridTab = this.resolveInitialGridTab(dependencies.initialGridTab, dependencies.boardType);
 
     this.state = writable<ProjectViewState>({
@@ -87,6 +90,11 @@ export class ProjectViewStore {
       availableAreaTags: [],
       availableProjectGridColumns: initialGridColumns.available,
       projectGridColumns: initialGridColumns.visible,
+      availableKanbanCardFields: initialKanbanCardFields.available,
+      kanbanCardFields: initialKanbanCardFields.visible,
+      kanbanNextTaskCount: initialKanbanNextTaskCount,
+      kanbanNotesPreviewWords: settings.kanbanNotesPreviewWords,
+      kanbanNotesPreviewLines: settings.kanbanNotesPreviewLines,
       sortBy: settings.defaultSortBy,
       sortDirection: settings.defaultSortDirection,
       projects: [],
@@ -119,6 +127,8 @@ export class ProjectViewStore {
       const currentArea = settings.areas.find((area) => area.id === currentAreaId) ?? null;
       const areaTagPrefix = currentArea ? `area/${currentArea.slug}` : null;
       const gridColumns = this.resolveGridColumns(settings, currentAreaId, currentArea);
+      const kanbanCardFields = this.resolveKanbanCardFields(settings, currentAreaId, currentArea);
+      const kanbanNextTaskCount = this.resolveKanbanNextTaskCount(settings, currentAreaId);
 
       const statusFilter = current.statusFilter.filter(
         (status) => statuses.includes(status) || status === "Unknown" || status === FILTER_NONE_TOKEN,
@@ -175,6 +185,11 @@ export class ProjectViewStore {
         availableAreaTags,
         availableProjectGridColumns: gridColumns.available,
         projectGridColumns: gridColumns.visible,
+        availableKanbanCardFields: kanbanCardFields.available,
+        kanbanCardFields: kanbanCardFields.visible,
+        kanbanNextTaskCount,
+        kanbanNotesPreviewWords: settings.kanbanNotesPreviewWords,
+        kanbanNotesPreviewLines: settings.kanbanNotesPreviewLines,
         hiddenKanbanStatuses: settings.kanbanHiddenStatuses,
         triStateCheckboxes: settings.enableTriStateCheckboxes,
         projects,
@@ -354,6 +369,38 @@ export class ProjectViewStore {
     this.refresh();
   }
 
+  async setKanbanCardFields(fieldIds: string[]): Promise<void> {
+    const current = get(this.state);
+    const areaId = current.currentAreaId;
+    const normalized = this.normalizeKanbanCardFieldIds(fieldIds, current.availableKanbanCardFields);
+    const settings = this.getSettings();
+
+    if (areaId) {
+      settings.kanbanCardFieldsByArea[areaId] = normalized;
+    } else {
+      settings.kanbanCardDefaultFieldIds = normalized;
+    }
+
+    await this.persistSettings();
+    this.refresh();
+  }
+
+  async setKanbanNextTaskCount(count: number): Promise<void> {
+    const normalized = this.normalizeKanbanNextTaskCount(count);
+    const current = get(this.state);
+    const areaId = current.currentAreaId;
+    const settings = this.getSettings();
+
+    if (areaId) {
+      settings.kanbanCardNextTaskCountByArea[areaId] = normalized;
+    } else {
+      settings.kanbanCardDefaultNextTaskCount = normalized;
+    }
+
+    await this.persistSettings();
+    this.refresh();
+  }
+
   private resolveInitialAreaId(areaId: string | null | undefined, settings: ProjectSettings): string | null {
     if (areaId && settings.areas.some((area) => area.id === areaId)) {
       return areaId;
@@ -407,6 +454,71 @@ export class ProjectViewStore {
     };
   }
 
+  private resolveKanbanCardFields(
+    settings: ProjectSettings,
+    areaId: string | null,
+    area: ProjectSettings["areas"][number] | null,
+  ): { available: KanbanCardField[]; visible: KanbanCardField[] } {
+    const available = this.buildAvailableKanbanCardFields(settings, area);
+    const sourceIds =
+      areaId && settings.kanbanCardFieldsByArea[areaId] && settings.kanbanCardFieldsByArea[areaId].length > 0
+        ? settings.kanbanCardFieldsByArea[areaId]
+        : settings.kanbanCardDefaultFieldIds;
+    const visibleIds = this.normalizeKanbanCardFieldIds(sourceIds, available);
+    const availableById = new Map(available.map((field) => [field.id, field]));
+    const visible = visibleIds
+      .map((id) => availableById.get(id))
+      .filter((field): field is KanbanCardField => field !== undefined);
+
+    return {
+      available,
+      visible,
+    };
+  }
+
+  private resolveKanbanNextTaskCount(settings: ProjectSettings, areaId: string | null): number {
+    if (!areaId) {
+      return this.normalizeKanbanNextTaskCount(settings.kanbanCardDefaultNextTaskCount);
+    }
+
+    const override = settings.kanbanCardNextTaskCountByArea[areaId];
+    if (typeof override === "number" && Number.isFinite(override) && override >= 1) {
+      return this.normalizeKanbanNextTaskCount(override);
+    }
+
+    return this.normalizeKanbanNextTaskCount(settings.kanbanCardDefaultNextTaskCount);
+  }
+
+  private buildAvailableKanbanCardFields(
+    settings: ProjectSettings,
+    area: ProjectSettings["areas"][number] | null,
+  ): KanbanCardField[] {
+    const fields: KanbanCardField[] = KANBAN_CARD_BASE_FIELDS.map((field) => ({ ...field }));
+    const seen = new Set(fields.map((field) => field.id));
+
+    for (const template of resolveAreaPropertyTemplates(settings, area)) {
+      const key = canonicalPropertyName(template.name);
+      if (RESERVED_PROJECT_COLUMN_PROPERTY_KEYS.has(key)) {
+        continue;
+      }
+
+      const id = `property:${key}`;
+      if (seen.has(id)) {
+        continue;
+      }
+
+      fields.push({
+        id,
+        label: template.name,
+        kind: "property",
+        propertyKey: key,
+      });
+      seen.add(id);
+    }
+
+    return fields;
+  }
+
   private buildAvailableGridColumns(
     settings: ProjectSettings,
     area: ProjectSettings["areas"][number] | null,
@@ -456,5 +568,33 @@ export class ProjectViewStore {
     }
 
     return deduped;
+  }
+
+  private normalizeKanbanCardFieldIds(fieldIds: string[], availableFields: KanbanCardField[]): string[] {
+    const availableIds = new Set(availableFields.map((field) => field.id));
+    const deduped: string[] = [];
+    for (const id of fieldIds) {
+      if (!availableIds.has(id)) {
+        continue;
+      }
+      if (deduped.includes(id)) {
+        continue;
+      }
+      deduped.push(id);
+    }
+
+    if (!deduped.includes("name") && availableIds.has("name")) {
+      deduped.unshift("name");
+    }
+
+    return deduped;
+  }
+
+  private normalizeKanbanNextTaskCount(value: number): number {
+    if (!Number.isFinite(value)) {
+      return 1;
+    }
+
+    return Math.max(1, Math.floor(value));
   }
 }

@@ -22,6 +22,7 @@ import {
   normalizeStringValue,
 } from "../utils/text";
 import { canonicalPropertyName, resolveAreaPropertyTemplates } from "../utils/properties";
+import { parseH2Sections, splitFrontmatter } from "../utils/markdown";
 
 interface ReconcileOptions {
   normalize: boolean;
@@ -480,6 +481,7 @@ export class ProjectIndexService {
     const requester = normalizeArrayValue(frontmatter.requester);
     const parentProject = normalizeStringValue(frontmatter["parent-project"]);
     const customProperties = this.extractCustomProperties(frontmatter, area);
+    const notesSectionText = this.extractNotesSectionText(content);
 
     const startDate = normalizeStringValue(frontmatter["start-date"]);
     const finishDate = normalizeStringValue(frontmatter["finish-date"]);
@@ -504,10 +506,25 @@ export class ProjectIndexService {
       parentProject,
       requester,
       customProperties,
+      notesSectionText,
       createdAt: file.stat.ctime,
       updatedAt: file.stat.mtime,
       tasks,
     };
+  }
+
+  private extractNotesSectionText(content: string): string {
+    const { body } = splitFrontmatter(content);
+    const { sections } = parseH2Sections(body.split(/\r?\n/));
+    const notesSection = sections.find((section) => section.titleNormalized === "notes");
+    if (!notesSection) {
+      return "";
+    }
+
+    return notesSection.lines
+      .slice(1)
+      .join("\n")
+      .trim();
   }
 
   private extractCustomProperties(frontmatter: Record<string, unknown>, area: AreaConfig): Record<string, string> {
@@ -583,6 +600,8 @@ export class ProjectIndexService {
         return project.status;
       case "priority":
         return project.priority;
+      case "timing-status":
+        return this.projectTimingSortValue(project);
       case "start-date":
         return project.startDate;
       case "finish-date":
@@ -618,6 +637,73 @@ export class ProjectIndexService {
     }
 
     return String(left).localeCompare(String(right));
+  }
+
+  private projectTimingSortValue(project: ProjectNote): string | null {
+    const statuses = this.projectTimingStatuses(project);
+    if (statuses.length === 0) {
+      return null;
+    }
+
+    return statuses.join("|");
+  }
+
+  private projectTimingStatuses(project: ProjectNote): string[] {
+    const timing: string[] = [];
+    const today = this.relativeLocalIsoDate(0);
+    const tomorrow = this.relativeLocalIsoDate(1);
+    const terminalStatus = this.isTerminalProjectStatus(project.status) || Boolean(project.finishDate);
+
+    if (
+      !terminalStatus &&
+      project.startDate &&
+      project.dueDate &&
+      project.startDate <= today &&
+      today <= project.dueDate
+    ) {
+      timing.push("Current");
+    }
+
+    if (!terminalStatus && project.dueDate === today) {
+      timing.push("Due");
+    }
+
+    if (!terminalStatus && project.dueDate && today > project.dueDate) {
+      timing.push("Overdue");
+    }
+
+    if (!terminalStatus && project.startDate === tomorrow) {
+      timing.push("Tomorrow");
+    }
+
+    if (!terminalStatus && project.startDate && project.startDate > tomorrow) {
+      timing.push("Future");
+    }
+
+    if (!terminalStatus && !project.startDate && !project.dueDate) {
+      timing.push("Needs Timing");
+    }
+
+    return timing;
+  }
+
+  private isTerminalProjectStatus(status: string | undefined): boolean {
+    const normalized = (status ?? "").trim().toLowerCase();
+    return normalized === "done" || normalized === "cancelled" || normalized === "canceled";
+  }
+
+  private relativeLocalIsoDate(daysFromToday: number): string {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() + daysFromToday);
+    return this.localIsoDate(date);
+  }
+
+  private localIsoDate(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   }
 
   private compareTasks(

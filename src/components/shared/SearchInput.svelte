@@ -14,7 +14,6 @@
 
 <input
   class="opn-search-input"
-  aria-label={ariaLabel}
   type="text"
   placeholder={placeholder}
   value={value}

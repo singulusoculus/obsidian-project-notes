@@ -6,6 +6,52 @@ This document chronicles the implementation journey, key decisions, lessons lear
 
 ## Pinned
 
+### Work done 2026.03.08
+- Updated Kanban lane layout sizing so lane height grows to fit all cards instead of clamping to viewport-like constraints.
+- Made Kanban columns stretch to the tallest visible lane so all columns share a consistent height.
+- Added overflow safeguards in lane/card/link styling so project cards do not spill outside their lane bounds.
+- Fixed Kanban drag UX when dragging from project links by disabling native link dragging and forcing the card element as the drag image source.
+- Improved Kanban drag anchor behavior so card drag preview starts from the exact click point within the card instead of snapping to a fixed corner offset.
+- Added configurable Kanban `Card` content controls with Area overrides:
+  - new `Card` picker in Kanban controls (next to `Columns`) for toggling visible card fields without reordering
+  - `Name` is always visible, and users can toggle `Priority`, dates, `Requester`, task count, `Next Task(s)`, `Notes`, and dynamic custom properties
+  - `Next Task(s)` count is configurable per Area from the Card picker (with global default + Area override persistence)
+- Added Notes rendering on Kanban cards from each project note’s `## Notes` section:
+  - Notes now support truncated preview with configurable word limit, fade-out, and `Read More` / `Read Less` expansion using Svelte transitions
+  - Added a global setting for Notes preview word limit and global default card field selection
+- Added settings support for global Kanban card defaults plus Area-level override controls.
+- Refined Kanban card rendering behavior:
+  - `Next Task(s)` now renders actionable task checkboxes on cards; checking one marks it complete from Kanban and immediately advances the list to the next incomplete task
+  - card rows now render label/value inline (except `Next Task(s)`, which remains stacked for task list readability)
+  - empty card fields are now hidden (instead of rendering placeholders) when the underlying note value is missing/blank
+- Updated Kanban card task checkbox behavior to respect the tri-state setting:
+  - with tri-state enabled, Kanban task toggles now cycle `unchecked -> in-progress -> checked -> unchecked`
+  - with tri-state disabled, Kanban task toggles use binary `unchecked <-> checked`
+  - Kanban task checkbox visuals now reflect `in-progress` mixed state consistently with the Tasks/Projects grids
+- Added project-level Timing Status support (date-driven badges based on project `start-date`, `due-date`, and terminal completion state).
+  - added `Timing` as a sortable Projects-grid column with badge rendering in both Project-Task and Parent-Child modes
+  - added `timing-status` to project sort options and shared query/index sort handling
+- Refined Kanban card footer metadata layout:
+  - moved `Priority` to a non-editable bottom-right text slot (label removed)
+  - added project Timing Status badges to the bottom-left of the same footer row
+  - added missing `Future` and `Needs Timing` timing-badge styles for consistent badge coverage
+- Updated Kanban card Notes rendering to respect markdown syntax and layout:
+  - Notes content now uses Obsidian `MarkdownRenderer` so formatting (lists, emphasis, links, etc.) renders correctly
+  - Notes field is now stacked with content below the `Notes` label on cards
+  - preserved `Read More` / `Read Less` transitions for long notes
+- Removed `aria-label` attributes from plugin UI elements and modal inputs to prevent Obsidian tooltip popups during normal interaction.
+  - stripped `aria-label` usage from board/grid/kanban/shared components and modal field setup
+  - restored affected wrapper markup where labels had shared lines with structural tags (controls sections, picker/dialog wrappers, tables)
+- Enhanced Kanban Notes `Read More` trigger logic to support dual thresholds.
+  - added a new global setting `Kanban notes preview lines` (default `5`)
+  - Notes now show `Read More` when content exceeds either the configured word limit or the line-limit/preview overflow
+  - preview max-height now scales with the configured line threshold
+- Updated Kanban card Next Task label to be count-aware.
+  - now shows `Next Task` when one task is displayed
+  - now shows `Next X Tasks` when multiple are displayed
+  - appends `(out of Y)` when only a subset is shown due to the configured next-task limit
+- Verified the changes compile successfully with `npm run build`.
+
 ### Work done 2026.03.06
 - Reworked Projects-grid expanded task filtering:
   - removed per-project `Show completed` control

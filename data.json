@@ -8,6 +8,13 @@
         "slug": "test",
         "folderPath": "Test Area",
         "includeMode": "top-level",
+        "propertyOverrides": [
+          {
+            "name": "TDX",
+            "type": "text",
+            "defaultValue": ""
+          }
+        ],
         "disabledPropertyNames": []
       }
     ],
@@ -70,15 +77,39 @@
         "project",
         "status",
         "priority",
+        "timing-status",
         "start-date",
         "finish-date",
         "due-date",
         "parent-project",
-        "requester"
+        "requester",
+        "property:tdx"
       ]
     },
+    "kanbanCardDefaultFieldIds": [
+      "name",
+      "priority",
+      "due-date",
+      "count-tasks",
+      "next-tasks"
+    ],
+    "kanbanCardFieldsByArea": {
+      "area-1772741878315-uiunz0": [
+        "name",
+        "timing-status",
+        "priority",
+        "next-tasks",
+        "notes"
+      ]
+    },
+    "kanbanCardDefaultNextTaskCount": 1,
+    "kanbanCardNextTaskCountByArea": {
+      "area-1772741878315-uiunz0": 1
+    },
+    "kanbanNotesPreviewWords": 100,
+    "kanbanNotesPreviewLines": 5,
     "enableTriStateCheckboxes": true,
-    "startupView": "projects",
+    "startupView": "kanban",
     "openTarget": "right-sidebar",
     "defaultProjectStatuses": [
       "To Do",
@@ -94,8 +125,8 @@
     "cacheReconcileMinutes": 10
   },
   "snapshot": {
-    "version": 4,
-    "generatedAt": 1772829950746,
+    "version": 5,
+    "generatedAt": 1773005669220,
     "projects": [
       {
         "path": "Test Area/Another Project.md",
@@ -104,7 +135,7 @@
         "displayName": "Another Project",
         "areaId": "area-1772741878315-uiunz0",
         "areaName": "Test",
-        "status": "Doing",
+        "status": "Awaiting Response",
         "statusIsUnknown": false,
         "priority": "🔵 Low",
         "startDate": null,
@@ -116,27 +147,13 @@
           "[[Person A]]",
           "[[Person B]]"
         ],
-        "customProperties": {},
+        "customProperties": {
+          "tdx": ""
+        },
+        "notesSectionText": "- This is a test note.",
         "createdAt": 1772742547198,
-        "updatedAt": 1772827183849,
+        "updatedAt": 1773002891077,
         "tasks": [
-          {
-            "id": "Test Area/Another Project.md:18",
-            "projectPath": "Test Area/Another Project.md",
-            "projectName": "Another Project",
-            "projectRequester": [
-              "[[Person A]]",
-              "[[Person B]]"
-            ],
-            "line": 18,
-            "text": "This is a test task 🛫 2026-03-05 📅 2026-03-06 ✅ 2026-03-05",
-            "state": "checked",
-            "checked": true,
-            "startDate": "2026-03-05",
-            "dueDate": "2026-03-06",
-            "finishedDate": "2026-03-05",
-            "rawLine": "- [x] This is a test task 🛫 2026-03-05 📅 2026-03-06 ✅ 2026-03-05"
-          },
           {
             "id": "Test Area/Another Project.md:19",
             "projectPath": "Test Area/Another Project.md",
@@ -146,13 +163,13 @@
               "[[Person B]]"
             ],
             "line": 19,
-            "text": "This is another task 🛫 2026-03-05 📅 2026-03-06 ✅ 2026-03-05",
+            "text": "This is a test task 🛫 2026-03-05 📅 2026-03-06 ✅ 2026-03-05",
             "state": "checked",
             "checked": true,
             "startDate": "2026-03-05",
             "dueDate": "2026-03-06",
             "finishedDate": "2026-03-05",
-            "rawLine": "- [x] This is another task 🛫 2026-03-05 📅 2026-03-06 ✅ 2026-03-05"
+            "rawLine": "- [x] This is a test task 🛫 2026-03-05 📅 2026-03-06 ✅ 2026-03-05"
           },
           {
             "id": "Test Area/Another Project.md:20",
@@ -163,13 +180,13 @@
               "[[Person B]]"
             ],
             "line": 20,
-            "text": "Testing in progress 🛫 2026-03-05 ✅ 2026-03-06",
+            "text": "This is another task 🛫 2026-03-05 📅 2026-03-06 ✅ 2026-03-05",
             "state": "checked",
             "checked": true,
             "startDate": "2026-03-05",
-            "dueDate": null,
-            "finishedDate": "2026-03-06",
-            "rawLine": "- [x] Testing in progress 🛫 2026-03-05 ✅ 2026-03-06"
+            "dueDate": "2026-03-06",
+            "finishedDate": "2026-03-05",
+            "rawLine": "- [x] This is another task 🛫 2026-03-05 📅 2026-03-06 ✅ 2026-03-05"
           },
           {
             "id": "Test Area/Another Project.md:21",
@@ -180,6 +197,23 @@
               "[[Person B]]"
             ],
             "line": 21,
+            "text": "Testing in progress 🛫 2026-03-05 ✅ 2026-03-06",
+            "state": "checked",
+            "checked": true,
+            "startDate": "2026-03-05",
+            "dueDate": null,
+            "finishedDate": "2026-03-06",
+            "rawLine": "- [x] Testing in progress 🛫 2026-03-05 ✅ 2026-03-06"
+          },
+          {
+            "id": "Test Area/Another Project.md:22",
+            "projectPath": "Test Area/Another Project.md",
+            "projectName": "Another Project",
+            "projectRequester": [
+              "[[Person A]]",
+              "[[Person B]]"
+            ],
+            "line": 22,
             "text": "Timing Test ",
             "state": "unchecked",
             "checked": false,
@@ -206,9 +240,252 @@
         "tags": [],
         "parentProject": null,
         "requester": [],
-        "customProperties": {},
+        "customProperties": {
+          "tdx": ""
+        },
+        "notesSectionText": "",
         "createdAt": 1772748698440,
-        "updatedAt": 1772816300370,
+        "updatedAt": 1773002891092,
+        "tasks": []
+      },
+      {
+        "path": "Test Area/Test 1.md",
+        "title": "Test 1",
+        "aliases": [],
+        "displayName": "Test 1",
+        "areaId": "area-1772741878315-uiunz0",
+        "areaName": "Test",
+        "status": "To Do",
+        "statusIsUnknown": false,
+        "priority": "🔵 Low",
+        "startDate": "2026-03-08",
+        "finishDate": null,
+        "dueDate": null,
+        "tags": [],
+        "parentProject": null,
+        "requester": [],
+        "customProperties": {
+          "tdx": ""
+        },
+        "notesSectionText": "",
+        "createdAt": 1773000155122,
+        "updatedAt": 1773002891056,
+        "tasks": []
+      },
+      {
+        "path": "Test Area/Test 11.md",
+        "title": "Test 11",
+        "aliases": [],
+        "displayName": "Test 11",
+        "areaId": "area-1772741878315-uiunz0",
+        "areaName": "Test",
+        "status": "To Do",
+        "statusIsUnknown": false,
+        "priority": "🔵 Low",
+        "startDate": "2026-03-08",
+        "finishDate": null,
+        "dueDate": null,
+        "tags": [],
+        "parentProject": null,
+        "requester": [],
+        "customProperties": {
+          "tdx": ""
+        },
+        "notesSectionText": "",
+        "createdAt": 1773000206463,
+        "updatedAt": 1773002890991,
+        "tasks": []
+      },
+      {
+        "path": "Test Area/Test 2.md",
+        "title": "Test 2",
+        "aliases": [],
+        "displayName": "Test 2",
+        "areaId": "area-1772741878315-uiunz0",
+        "areaName": "Test",
+        "status": "To Do",
+        "statusIsUnknown": false,
+        "priority": "🔵 Low",
+        "startDate": "2026-03-08",
+        "finishDate": null,
+        "dueDate": null,
+        "tags": [],
+        "parentProject": null,
+        "requester": [],
+        "customProperties": {
+          "tdx": ""
+        },
+        "notesSectionText": "",
+        "createdAt": 1773000158921,
+        "updatedAt": 1773002891051,
+        "tasks": []
+      },
+      {
+        "path": "Test Area/Test 3.md",
+        "title": "Test 3",
+        "aliases": [],
+        "displayName": "Test 3",
+        "areaId": "area-1772741878315-uiunz0",
+        "areaName": "Test",
+        "status": "To Do",
+        "statusIsUnknown": false,
+        "priority": "🔵 Low",
+        "startDate": "2026-03-08",
+        "finishDate": null,
+        "dueDate": null,
+        "tags": [],
+        "parentProject": null,
+        "requester": [],
+        "customProperties": {
+          "tdx": ""
+        },
+        "notesSectionText": "",
+        "createdAt": 1773000164222,
+        "updatedAt": 1773002891046,
+        "tasks": []
+      },
+      {
+        "path": "Test Area/Test 4.md",
+        "title": "Test 4",
+        "aliases": [],
+        "displayName": "Test 4",
+        "areaId": "area-1772741878315-uiunz0",
+        "areaName": "Test",
+        "status": "To Do",
+        "statusIsUnknown": false,
+        "priority": "🔵 Low",
+        "startDate": "2026-03-08",
+        "finishDate": null,
+        "dueDate": null,
+        "tags": [],
+        "parentProject": null,
+        "requester": [],
+        "customProperties": {
+          "tdx": ""
+        },
+        "notesSectionText": "",
+        "createdAt": 1773000169113,
+        "updatedAt": 1773002891042,
+        "tasks": []
+      },
+      {
+        "path": "Test Area/Test 5.md",
+        "title": "Test 5",
+        "aliases": [],
+        "displayName": "Test 5",
+        "areaId": "area-1772741878315-uiunz0",
+        "areaName": "Test",
+        "status": "To Do",
+        "statusIsUnknown": false,
+        "priority": "🔵 Low",
+        "startDate": "2026-03-08",
+        "finishDate": null,
+        "dueDate": null,
+        "tags": [],
+        "parentProject": null,
+        "requester": [],
+        "customProperties": {
+          "tdx": ""
+        },
+        "notesSectionText": "",
+        "createdAt": 1773000172323,
+        "updatedAt": 1773002891037,
+        "tasks": []
+      },
+      {
+        "path": "Test Area/Test 6.md",
+        "title": "Test 6",
+        "aliases": [],
+        "displayName": "Test 6",
+        "areaId": "area-1772741878315-uiunz0",
+        "areaName": "Test",
+        "status": "To Do",
+        "statusIsUnknown": false,
+        "priority": "🔵 Low",
+        "startDate": "2026-03-08",
+        "finishDate": null,
+        "dueDate": null,
+        "tags": [],
+        "parentProject": null,
+        "requester": [],
+        "customProperties": {
+          "tdx": ""
+        },
+        "notesSectionText": "",
+        "createdAt": 1773000175601,
+        "updatedAt": 1773002891030,
+        "tasks": []
+      },
+      {
+        "path": "Test Area/Test 7.md",
+        "title": "Test 7",
+        "aliases": [],
+        "displayName": "Test 7",
+        "areaId": "area-1772741878315-uiunz0",
+        "areaName": "Test",
+        "status": "To Do",
+        "statusIsUnknown": false,
+        "priority": "🔵 Low",
+        "startDate": "2026-03-08",
+        "finishDate": null,
+        "dueDate": null,
+        "tags": [],
+        "parentProject": null,
+        "requester": [],
+        "customProperties": {
+          "tdx": ""
+        },
+        "notesSectionText": "",
+        "createdAt": 1773000179167,
+        "updatedAt": 1773002891019,
+        "tasks": []
+      },
+      {
+        "path": "Test Area/Test 8.md",
+        "title": "Test 8",
+        "aliases": [],
+        "displayName": "Test 8",
+        "areaId": "area-1772741878315-uiunz0",
+        "areaName": "Test",
+        "status": "To Do",
+        "statusIsUnknown": false,
+        "priority": "🔵 Low",
+        "startDate": "2026-03-08",
+        "finishDate": null,
+        "dueDate": null,
+        "tags": [],
+        "parentProject": null,
+        "requester": [],
+        "customProperties": {
+          "tdx": ""
+        },
+        "notesSectionText": "",
+        "createdAt": 1773000183868,
+        "updatedAt": 1773002891014,
+        "tasks": []
+      },
+      {
+        "path": "Test Area/Test 9.md",
+        "title": "Test 9",
+        "aliases": [],
+        "displayName": "Test 9",
+        "areaId": "area-1772741878315-uiunz0",
+        "areaName": "Test",
+        "status": "To Do",
+        "statusIsUnknown": false,
+        "priority": "🔵 Low",
+        "startDate": "2026-03-08",
+        "finishDate": null,
+        "dueDate": "2026-03-07",
+        "tags": [],
+        "parentProject": null,
+        "requester": [],
+        "customProperties": {
+          "tdx": ""
+        },
+        "notesSectionText": "",
+        "createdAt": 1773000187070,
+        "updatedAt": 1773004763076,
         "tasks": []
       },
       {
@@ -227,23 +504,26 @@
         "tags": [],
         "parentProject": null,
         "requester": [],
-        "customProperties": {},
+        "customProperties": {
+          "tdx": ""
+        },
+        "notesSectionText": "- Some notes. \n- Some more. \n- It looks like the grid is refreshing when any thing in the note changes. It should only refresh when tasks or properties change\n- Testing for the jumpiness again \n- Test\n- Some notes. \n- Some more. \n- It looks like the grid is refreshing when any thing in the note changes. It should only refresh when tasks or properties change\n- Testing for the jumpiness again \n- Test\n- Some notes. \n- Some more. \n- It looks like the grid is refreshing when any thing in the note changes. It should only refresh when tasks or properties change\n- Testing for the jumpiness again \n- Test",
         "createdAt": 1772742226623,
-        "updatedAt": 1772826552116,
+        "updatedAt": 1773005080885,
         "tasks": [
           {
-            "id": "Test Area/Test Project.md:15",
+            "id": "Test Area/Test Project.md:16",
             "projectPath": "Test Area/Test Project.md",
             "projectName": "Test Project",
             "projectRequester": [],
-            "line": 15,
+            "line": 16,
             "text": "Another test task 🛫 2026-03-05 📅 2026-03-06",
-            "state": "unchecked",
+            "state": "in-progress",
             "checked": false,
             "startDate": "2026-03-05",
             "dueDate": "2026-03-06",
             "finishedDate": null,
-            "rawLine": "- [ ] Another test task 🛫 2026-03-05 📅 2026-03-06"
+            "rawLine": "- [/] Another test task 🛫 2026-03-05 📅 2026-03-06"
           }
         ]
       },
@@ -263,9 +543,12 @@
         "tags": [],
         "parentProject": null,
         "requester": [],
-        "customProperties": {},
+        "customProperties": {
+          "tdx": ""
+        },
+        "notesSectionText": "",
         "createdAt": 1772815815238,
-        "updatedAt": 1772816319424,
+        "updatedAt": 1773002891067,
         "tasks": []
       },
       {
@@ -275,7 +558,7 @@
         "displayName": "Waht is this?",
         "areaId": "area-1772741878315-uiunz0",
         "areaName": "Test",
-        "status": "Awaiting Response",
+        "status": "Doing",
         "statusIsUnknown": false,
         "priority": "🟢 Medium",
         "startDate": null,
@@ -284,16 +567,19 @@
         "tags": [],
         "parentProject": null,
         "requester": [],
-        "customProperties": {},
+        "customProperties": {
+          "tdx": ""
+        },
+        "notesSectionText": "",
         "createdAt": 1772746116481,
-        "updatedAt": 1772826583316,
+        "updatedAt": 1773005531273,
         "tasks": [
           {
-            "id": "Test Area/Waht is this?.md:15",
+            "id": "Test Area/Waht is this?.md:16",
             "projectPath": "Test Area/Waht is this?.md",
             "projectName": "Waht is this?",
             "projectRequester": [],
-            "line": 15,
+            "line": 16,
             "text": "Testing 🛫 2026-03-05 📅 2026-03-05",
             "state": "unchecked",
             "checked": false,
@@ -301,6 +587,90 @@
             "dueDate": "2026-03-05",
             "finishedDate": null,
             "rawLine": "- [ ] Testing 🛫 2026-03-05 📅 2026-03-05"
+          },
+          {
+            "id": "Test Area/Waht is this?.md:17",
+            "projectPath": "Test Area/Waht is this?.md",
+            "projectName": "Waht is this?",
+            "projectRequester": [],
+            "line": 17,
+            "text": "Test 2 🛫 2026-03-05 📅 2026-03-05",
+            "state": "unchecked",
+            "checked": false,
+            "startDate": "2026-03-05",
+            "dueDate": "2026-03-05",
+            "finishedDate": null,
+            "rawLine": "- [ ] Test 2 🛫 2026-03-05 📅 2026-03-05"
+          },
+          {
+            "id": "Test Area/Waht is this?.md:18",
+            "projectPath": "Test Area/Waht is this?.md",
+            "projectName": "Waht is this?",
+            "projectRequester": [],
+            "line": 18,
+            "text": "Test 3 🛫 2026-03-04 📅 2026-03-05",
+            "state": "unchecked",
+            "checked": false,
+            "startDate": "2026-03-04",
+            "dueDate": "2026-03-05",
+            "finishedDate": null,
+            "rawLine": "- [ ] Test 3 🛫 2026-03-04 📅 2026-03-05"
+          },
+          {
+            "id": "Test Area/Waht is this?.md:19",
+            "projectPath": "Test Area/Waht is this?.md",
+            "projectName": "Waht is this?",
+            "projectRequester": [],
+            "line": 19,
+            "text": "Test 4 🛫 2026-03-05 📅 2026-03-05",
+            "state": "unchecked",
+            "checked": false,
+            "startDate": "2026-03-05",
+            "dueDate": "2026-03-05",
+            "finishedDate": null,
+            "rawLine": "- [ ] Test 4 🛫 2026-03-05 📅 2026-03-05"
+          },
+          {
+            "id": "Test Area/Waht is this?.md:20",
+            "projectPath": "Test Area/Waht is this?.md",
+            "projectName": "Waht is this?",
+            "projectRequester": [],
+            "line": 20,
+            "text": "Test 5 🛫 2026-03-05 📅 2026-03-05",
+            "state": "unchecked",
+            "checked": false,
+            "startDate": "2026-03-05",
+            "dueDate": "2026-03-05",
+            "finishedDate": null,
+            "rawLine": "- [ ] Test 5 🛫 2026-03-05 📅 2026-03-05"
+          },
+          {
+            "id": "Test Area/Waht is this?.md:21",
+            "projectPath": "Test Area/Waht is this?.md",
+            "projectName": "Waht is this?",
+            "projectRequester": [],
+            "line": 21,
+            "text": "Test 6 🛫 2026-03-05 📅 2026-03-04",
+            "state": "unchecked",
+            "checked": false,
+            "startDate": "2026-03-05",
+            "dueDate": "2026-03-04",
+            "finishedDate": null,
+            "rawLine": "- [ ] Test 6 🛫 2026-03-05 📅 2026-03-04"
+          },
+          {
+            "id": "Test Area/Waht is this?.md:22",
+            "projectPath": "Test Area/Waht is this?.md",
+            "projectName": "Waht is this?",
+            "projectRequester": [],
+            "line": 22,
+            "text": "Test 7 🛫 2026-03-05 📅 2026-03-05",
+            "state": "unchecked",
+            "checked": false,
+            "startDate": "2026-03-05",
+            "dueDate": "2026-03-05",
+            "finishedDate": null,
+            "rawLine": "- [ ] Test 7 🛫 2026-03-05 📅 2026-03-05"
           }
         ]
       },
@@ -318,18 +688,21 @@
         "finishDate": null,
         "dueDate": null,
         "tags": [],
-        "parentProject": "[29466842](https://support.acu.edu/TDNext/Apps/521/Tickets/TicketDet?TicketID=29466842)",
+        "parentProject": null,
         "requester": [],
-        "customProperties": {},
+        "customProperties": {
+          "tdx": "[29466842](https://support.acu.edu/TDNext/Apps/521/Tickets/TicketDet?TicketID=29466842)"
+        },
+        "notesSectionText": "",
         "createdAt": 1772748553354,
-        "updatedAt": 1772829949919,
+        "updatedAt": 1773001620173,
         "tasks": [
           {
-            "id": "Test Area/Who done it?.md:15",
+            "id": "Test Area/Who done it?.md:16",
             "projectPath": "Test Area/Who done it?.md",
             "projectName": "Who done it?",
             "projectRequester": [],
-            "line": 15,
+            "line": 16,
             "text": "This is a task - duh 🛫 2026-03-06 📅 2026-03-13",
             "state": "unchecked",
             "checked": false,

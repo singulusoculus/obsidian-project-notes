@@ -1,4 +1,10 @@
-import type { ProjectGridColumn, ProjectPropertyTemplate, ProjectPropertyType, ProjectSettings } from "./types";
+import type {
+  KanbanCardField,
+  ProjectGridColumn,
+  ProjectPropertyTemplate,
+  ProjectPropertyType,
+  ProjectSettings,
+} from "./types";
 
 export const DEFAULT_STATUSES = [
   "To Do",
@@ -52,6 +58,7 @@ export const PROJECT_GRID_BASE_COLUMNS: ProjectGridColumn[] = [
   { id: "project", label: "Project", kind: "base", sortable: true, sortField: "project" },
   { id: "status", label: "Status", kind: "base", sortable: true, sortField: "status" },
   { id: "priority", label: "Priority", kind: "base", sortable: true, sortField: "priority" },
+  { id: "timing-status", label: "Timing", kind: "base", sortable: true, sortField: "timing-status" },
   { id: "start-date", label: "Start", kind: "base", sortable: true, sortField: "start-date" },
   { id: "finish-date", label: "Finish", kind: "base", sortable: true, sortField: "finish-date" },
   { id: "due-date", label: "Due", kind: "base", sortable: true, sortField: "due-date" },
@@ -60,12 +67,33 @@ export const PROJECT_GRID_BASE_COLUMNS: ProjectGridColumn[] = [
   { id: "requester", label: "Requester", kind: "base", sortable: true, sortField: "requester" },
 ];
 
+export const KANBAN_CARD_BASE_FIELDS: KanbanCardField[] = [
+  { id: "name", label: "Name", kind: "base" },
+  { id: "timing-status", label: "Timing Status", kind: "base" },
+  { id: "priority", label: "Priority", kind: "base" },
+  { id: "start-date", label: "Start Date", kind: "base" },
+  { id: "due-date", label: "Due Date", kind: "base" },
+  { id: "finish-date", label: "Finish Date", kind: "base" },
+  { id: "requester", label: "Requester", kind: "base" },
+  { id: "count-tasks", label: "Count Tasks", kind: "base" },
+  { id: "next-tasks", label: "Next Task(s)", kind: "base" },
+  { id: "notes", label: "Notes", kind: "base" },
+];
+
+export const DEFAULT_KANBAN_CARD_FIELD_IDS = ["name", "timing-status", "priority", "due-date", "count-tasks", "next-tasks"];
+
 export const DEFAULT_SETTINGS: ProjectSettings = {
   areas: [],
   statuses: DEFAULT_STATUSES,
   priorities: DEFAULT_PRIORITIES,
   defaultProperties: DEFAULT_PROJECT_PROPERTIES,
   gridColumnsByArea: {},
+  kanbanCardDefaultFieldIds: [...DEFAULT_KANBAN_CARD_FIELD_IDS],
+  kanbanCardFieldsByArea: {},
+  kanbanCardDefaultNextTaskCount: 1,
+  kanbanCardNextTaskCountByArea: {},
+  kanbanNotesPreviewWords: 100,
+  kanbanNotesPreviewLines: 5,
   enableTriStateCheckboxes: true,
   startupView: "none",
   openTarget: "new-tab",
@@ -76,7 +104,7 @@ export const DEFAULT_SETTINGS: ProjectSettings = {
   cacheReconcileMinutes: 10,
 };
 
-export const SNAPSHOT_VERSION = 4;
+export const SNAPSHOT_VERSION = 5;
 
 export const TASK_START_EMOJI = "🛫";
 export const TASK_DUE_EMOJI = "📅";

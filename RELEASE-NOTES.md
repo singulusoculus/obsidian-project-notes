@@ -1,5 +1,30 @@
 # Release Notes
 
+## v0.0.4
+
+### Features
+- Kanban lanes now expand to fit their cards and all visible lanes match the tallest lane.
+- Added configurable Kanban card field visibility with global defaults and Area overrides.
+- Added configurable Kanban `Next Task` count (global default + Area override).
+- Added Notes content on Kanban cards from the project `## Notes` section with `Read More` / `Read Less`.
+- Kanban Notes now render markdown formatting (lists, emphasis, links, etc.).
+- Added project `Timing Status` badges (`Current`, `Due`, `Overdue`, `Tomorrow`, `Future`, `Needs Timing`) to:
+  - Projects grid as a sortable `Timing` column
+  - Kanban cards footer
+- Kanban card footer now shows timing badges on the left and priority text on the bottom-right.
+- Added `Kanban notes preview lines` setting (default `5`) and dual preview trigger behavior:
+  - `Read More` appears when Notes exceed word limit or line limit
+- Kanban `Next Task` card label is now dynamic:
+  - `Next Task` for one item
+  - `Next X Tasks` for multiple
+  - optional `(out of Y)` when only a subset is shown
+
+### Fixes
+- Improved Kanban drag behavior when starting drag from project links.
+- Fixed Kanban drag preview anchor so the card follows from the actual click position.
+- Kanban task checkboxes now fully respect tri-state behavior in card task lists.
+- Removed `aria-label` attributes from plugin UI/modals to prevent unwanted tooltip popups in Obsidian.
+
 ## v0.0.3
 
 ### Features

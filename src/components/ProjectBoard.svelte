@@ -38,7 +38,6 @@
   <header class="opn-board-header">
     <div class="opn-board-header-left">
       <select
-        aria-label="Select area"
         value={state.currentAreaId ?? ""}
         onchange={handleAreaChange}
       >
@@ -49,7 +48,7 @@
     </div>
 
     <div class="opn-board-header-center">
-      <div class="opn-grid-tabs" role="tablist" aria-label="Project notes views">
+      <div class="opn-grid-tabs" role="tablist">
         <span
           class="opn-grid-tab"
           role="tab"
@@ -90,7 +89,6 @@
       <button
         type="button"
         class="secondary opn-settings-shortcut"
-        aria-label="Open Project Notes settings"
         title="Project Notes settings"
         onclick={openSettings}
       >
@@ -100,7 +98,7 @@
   </header>
 
   {#if state.areas.length === 0}
-    <section class="opn-empty" aria-label="No areas configured">
+    <section class="opn-empty">
       <h3>No Areas configured</h3>
       <p>Add an Area in plugin settings to start indexing projects.</p>
     </section>

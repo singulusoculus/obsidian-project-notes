@@ -1,4 +1,6 @@
 <script lang="ts">
+  import type { Snippet } from "svelte";
+
   interface PickerItem {
     id: string;
     label: string;
@@ -11,12 +13,16 @@
     label = "Columns",
     items,
     onToggle,
-    onReorder,
+    onReorder = () => undefined,
+    allowReorder = true,
+    extraContent,
   } = $props<{
     label?: string;
     items: PickerItem[];
     onToggle: (id: string, visible: boolean) => void;
-    onReorder: (orderedIds: string[]) => void;
+    onReorder?: (orderedIds: string[]) => void;
+    allowReorder?: boolean;
+    extraContent?: Snippet;
   }>();
 
   let isOpen = $state(false);
@@ -89,6 +95,9 @@
   }
 
   function handleDragStart(event: DragEvent, id: string): void {
+    if (!allowReorder) {
+      return;
+    }
     draggingId = id;
     if (event.dataTransfer) {
       event.dataTransfer.setData("text/plain", id);
@@ -97,6 +106,9 @@
   }
 
   function handleDragOver(event: DragEvent): void {
+    if (!allowReorder) {
+      return;
+    }
     event.preventDefault();
     if (event.dataTransfer) {
       event.dataTransfer.dropEffect = "move";
@@ -104,6 +116,9 @@
   }
 
   function handleDrop(event: DragEvent, targetId: string): void {
+    if (!allowReorder) {
+      return;
+    }
     event.preventDefault();
     const sourceId = event.dataTransfer?.getData("text/plain") || draggingId;
     draggingId = null;
@@ -126,6 +141,9 @@
   }
 
   function handleDragEnd(): void {
+    if (!allowReorder) {
+      return;
+    }
     draggingId = null;
   }
 </script>
@@ -142,18 +160,20 @@
   </button>
 
   {#if isOpen}
-    <div class="opn-column-picker" role="dialog" aria-label={`${label} settings`}>
+    <div class="opn-column-picker" role="dialog">
       <ul class="opn-column-order-list">
         {#each orderedItems as item (item.id)}
           <li
-            draggable={item.draggable !== false}
+            draggable={allowReorder && item.draggable !== false}
             class:dragging={draggingId === item.id}
             ondragstart={(event) => handleDragStart(event, item.id)}
             ondragover={handleDragOver}
             ondrop={(event) => handleDrop(event, item.id)}
             ondragend={handleDragEnd}
           >
-            <span class="opn-column-drag-handle" aria-hidden="true">{item.draggable === false ? "•" : "⋮⋮"}</span>
+            <span class="opn-column-drag-handle" aria-hidden="true">
+              {allowReorder && item.draggable !== false ? "⋮⋮" : "•"}
+            </span>
             <span class="opn-column-name">{item.label}</span>
             {#if item.hideable !== false}
               <input
@@ -166,6 +186,7 @@
           </li>
         {/each}
       </ul>
+      {@render extraContent?.()}
     </div>
   {/if}
 </div>
