@@ -13,7 +13,7 @@
 #### 2026.03.09 (uncommitted work)
 - Normalized the development log structure to match the git-driven hierarchy in `AGENTS.md` and verified that `v0.0.4` is visible on `HEAD`.
 
-#### 2026.03.09 (uncommitted work)
+#### 2026.03.08 (uncommitted work)
 - Fixed Kanban drag ghost sizing for cards with collapsed Notes previews.
   - drag preview now uses a clipped custom drag image sized to the card’s visible bounding box
   - prevents drag ghost from expanding to hidden/collapsed Notes content height
