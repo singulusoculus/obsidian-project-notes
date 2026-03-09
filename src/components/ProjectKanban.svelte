@@ -36,6 +36,7 @@
   let expandedNotesByPath = $state<Record<string, boolean>>({});
   let notesLineOverflowByPath = $state<Record<string, boolean>>({});
   let completingTaskIds = $state<string[]>([]);
+  let dragImageElement: HTMLElement | null = null;
 
   const statusOptions = $derived.by(() => {
     const values = new Set(state.statuses);
@@ -123,6 +124,29 @@
     event.preventDefault();
   }
 
+  function cleanupDragImage(): void {
+    dragImageElement?.remove();
+    dragImageElement = null;
+  }
+
+  function createDragImage(source: HTMLElement, rect: DOMRect): HTMLElement {
+    const clone = source.cloneNode(true);
+    const dragImage = clone instanceof HTMLElement ? clone : source;
+    dragImage.classList.add("opn-kanban-card-drag-image");
+    dragImage.style.position = "fixed";
+    dragImage.style.left = "-10000px";
+    dragImage.style.top = "-10000px";
+    dragImage.style.width = `${rect.width}px`;
+    dragImage.style.height = `${rect.height}px`;
+    dragImage.style.maxHeight = `${rect.height}px`;
+    dragImage.style.overflow = "hidden";
+    dragImage.style.pointerEvents = "none";
+    dragImage.style.margin = "0";
+    dragImage.style.boxSizing = "border-box";
+    document.body.appendChild(dragImage);
+    return dragImage;
+  }
+
   function handleDragStart(event: DragEvent, path: string): void {
     draggingPath = path;
     event.dataTransfer?.setData("text/project-path", path);
@@ -140,7 +164,9 @@
       const offsetY = Number.isFinite(rawOffsetY)
         ? Math.min(Math.max(rawOffsetY, 0), Math.max(rect.height - 1, 0))
         : fallbackOffset;
-      event.dataTransfer.setDragImage(dragSource, offsetX, offsetY);
+      cleanupDragImage();
+      dragImageElement = createDragImage(dragSource, rect);
+      event.dataTransfer.setDragImage(dragImageElement, offsetX, offsetY);
     }
     if (event.dataTransfer) {
       event.dataTransfer.effectAllowed = "move";
@@ -149,6 +175,7 @@
 
   function handleDragEnd(): void {
     draggingPath = null;
+    cleanupDragImage();
   }
 
   function handleDrop(event: DragEvent, status: string): void {
@@ -169,6 +196,7 @@
     });
 
     draggingPath = null;
+    cleanupDragImage();
   }
 
   function handleProjectLinkClick(event: MouseEvent, path: string): void {
@@ -979,13 +1007,14 @@
     {#if !state.showHiddenKanban && hiddenStatuses.length > 0}
       <aside class="opn-kanban-dropzones">
         {#each hiddenStatuses as status (status)}
+          {@const hiddenCount = projectsByStatus.get(status)?.length ?? 0}
           <div
             class="opn-kanban-dropzone"
             role="region"
             ondragover={allowDrop}
             ondrop={(event) => handleDrop(event, status)}
           >
-            <strong>{status}</strong>
+            <strong>{status} ({hiddenCount})</strong>
             <span>Drop here</span>
           </div>
         {/each}

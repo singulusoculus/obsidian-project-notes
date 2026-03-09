@@ -1,12 +1,28 @@
 # Development Log
 
-This document chronicles the implementation journey, key decisions, lessons learned, and debugging insights from building Obsidian Project Notes.
-- This document is for brief descriptions of daily work done and lessons learned. In date descending order (newest date on top)
-- If todays date does not exist, create it.
+- This document is for brief descriptions of work done and lessons learned.
+- Structure:
+  - `##` = version tag
+  - `###` = commit
+  - `####` = day
+- Only create `##` when a new version tag is created.
+- Only create `###` when a new commit is created.
+- Use `#### YYYY.MM.DD (uncommitted work)` for work not yet committed.
+- Keep newest items first.
 
-## Pinned
+#### 2026.03.09 (uncommitted work)
+- Normalized the development log structure to match the git-driven hierarchy in `AGENTS.md` and verified that `v0.0.4` is visible on `HEAD`.
 
-### Work done 2026.03.08
+#### 2026.03.09 (uncommitted work)
+- Fixed Kanban drag ghost sizing for cards with collapsed Notes previews.
+  - drag preview now uses a clipped custom drag image sized to the card’s visible bounding box
+  - prevents drag ghost from expanding to hidden/collapsed Notes content height
+- Updated hidden Kanban status drop zones to include item counts in the label (for example `Done (23)`).
+- Verified the changes compile successfully with `npm run build`.
+
+## v0.0.4
+### 85aad9c Kanban stuff; update to v0.0.4
+#### 2026.03.08
 - Updated Kanban lane layout sizing so lane height grows to fit all cards instead of clamping to viewport-like constraints.
 - Made Kanban columns stretch to the tallest visible lane so all columns share a consistent height.
 - Added overflow safeguards in lane/card/link styling so project cards do not spill outside their lane bounds.
@@ -50,9 +66,9 @@ This document chronicles the implementation journey, key decisions, lessons lear
   - now shows `Next Task` when one task is displayed
   - now shows `Next X Tasks` when multiple are displayed
   - appends `(out of Y)` when only a subset is shown due to the configured next-task limit
-- Verified the changes compile successfully with `npm run build`.
 
-### Work done 2026.03.06
+
+#### 2026.03.06
 - Reworked Projects-grid expanded task filtering:
   - removed per-project `Show completed` control
   - added global `Task Status` multiselect (`To Do`, `Doing`, `Done`) with tri-state-aware options (`To Do`, `Done` when tri-state is off)
@@ -81,7 +97,7 @@ This document chronicles the implementation journey, key decisions, lessons lear
 - Updated Projects grid expand behavior to hide task expand toggles when a project has only completed tasks.
 - Verified all changes with `npm run build` after each implementation batch.
 
-### Work done 2026.03.05
+#### 2026.03.05
 - Scaffolded the plugin from scratch in TypeScript with Svelte 5 (Runes), including build pipeline, manifest, styles, and version files.
 - Implemented cache-first core services:
   - Area resolution with per-area include mode (`top-level` or `recursive`)
@@ -216,4 +232,4 @@ This document chronicles the implementation journey, key decisions, lessons lear
   - project index change detection now ignores volatile `createdAt`/`updatedAt` timestamps during equivalence checks
   - editing note body content outside tasks/properties no longer triggers grid refresh churn
 
-### Work done 2026.03.04
+#### 2026.03.04

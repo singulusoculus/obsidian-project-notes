@@ -126,7 +126,7 @@
   },
   "snapshot": {
     "version": 5,
-    "generatedAt": 1773005669220,
+    "generatedAt": 1773064317400,
     "projects": [
       {
         "path": "Test Area/Another Project.md",
@@ -231,7 +231,7 @@
         "displayName": "DAte test",
         "areaId": "area-1772741878315-uiunz0",
         "areaName": "Test",
-        "status": "To Do",
+        "status": "Cancelled",
         "statusIsUnknown": false,
         "priority": "🟢 Medium",
         "startDate": "2026-03-05",
@@ -245,7 +245,7 @@
         },
         "notesSectionText": "",
         "createdAt": 1772748698440,
-        "updatedAt": 1773002891092,
+        "updatedAt": 1773023253218,
         "tasks": []
       },
       {
@@ -509,7 +509,7 @@
         },
         "notesSectionText": "- Some notes. \n- Some more. \n- It looks like the grid is refreshing when any thing in the note changes. It should only refresh when tasks or properties change\n- Testing for the jumpiness again \n- Test\n- Some notes. \n- Some more. \n- It looks like the grid is refreshing when any thing in the note changes. It should only refresh when tasks or properties change\n- Testing for the jumpiness again \n- Test\n- Some notes. \n- Some more. \n- It looks like the grid is refreshing when any thing in the note changes. It should only refresh when tasks or properties change\n- Testing for the jumpiness again \n- Test",
         "createdAt": 1772742226623,
-        "updatedAt": 1773005080885,
+        "updatedAt": 1773023101696,
         "tasks": [
           {
             "id": "Test Area/Test Project.md:16",

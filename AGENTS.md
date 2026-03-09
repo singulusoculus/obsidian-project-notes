@@ -5,9 +5,28 @@
 - Refer to https://docs.obsidian.md/Home for all plugin development documentation
     - You will want to access the Plugins and Reference sections
 - Use Obsidian bases for the views we create - https://docs.obsidian.md/plugins/guides/bases-view
-- Log a summary of work completed in DEVELOPMENT-LOG.md under the current days section. If that section does not exist, create it
 - Reference Svelte documentation here: https://svelte.dev/docs/svelte/overview
 - How to use Svelte in Obsidian: https://docs.obsidian.md/Plugins/Getting+started/Use+Svelte+in+your+plugin
+
+- Log a summary of work completed in DEVELOPMENT-LOG.md under the current days section. If that section does not exist, create it
+- Before updating DEVELOPMENT-LOG.md on any turn, check git state:
+  - current HEAD commit sha and subject
+  - version tags on HEAD that match `v*`
+  - whether there is uncommitted work in the working tree
+- Organize DEVELOPMENT-LOG.md in reverse chronological order with this hierarchy:
+  - `## vX.Y.Z` only when a new version tag is detected on HEAD and that version header does not already exist
+  - `### <short-sha> <commit subject>` only when a new HEAD commit is detected and that commit header does not already exist
+  - `#### YYYY.MM.DD (uncommitted work)` for current work not yet committed
+  - `#### YYYY.MM.DD` under a commit header for committed work
+- Do not create placeholder `##` or `###` headers for uncommitted work.
+- Uncommitted day headers live above the most recent commit/version sections.
+- Untagged commits live above the most recent version section.
+- If a new version tag is applied to HEAD, insert the new `##` header immediately above that commit section.
+- If a new commit is created, insert the new `###` header above older commit sections and create a day header under it if needed.
+- Keep newest items first.
+- Do not duplicate existing version, commit, or day headers.
+- Append new bullets under the correct current day header.
+- Assume release tags are applied to HEAD. If a version tag is added to an older commit later, stop and ask how the log should be reorganized.
 
 
 ## TypeScript

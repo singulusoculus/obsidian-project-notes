@@ -580,6 +580,14 @@ button.secondary {
   min-width: 0;
 }
 
+.opn-kanban-card-drag-image {
+  contain: layout paint;
+}
+
+.opn-kanban-card-drag-image * {
+  pointer-events: none !important;
+}
+
 .opn-kanban-card a.opn-link {
   overflow-wrap: anywhere;
   word-break: break-word;
