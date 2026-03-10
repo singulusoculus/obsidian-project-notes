@@ -1,7 +1,7 @@
 {
   "id": "obsidian-project-notes",
   "name": "Project Notes",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "minAppVersion": "1.5.0",
   "description": "Manage project notes in Area folders with Grid and Kanban views.",
   "author": "singulusoculus",
