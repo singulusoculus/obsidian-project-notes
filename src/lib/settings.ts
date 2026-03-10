@@ -164,6 +164,7 @@ function normalizeSortBy(value: unknown): ProjectSettings["defaultSortBy"] {
     value === "status" ||
     value === "priority" ||
     value === "timing-status" ||
+    value === "scheduled-date" ||
     value === "start-date" ||
     value === "finish-date" ||
     value === "due-date" ||

@@ -1,11 +1,12 @@
 import type { App, TFile } from "obsidian";
-import type { AddTaskRequest, ProjectTask, TaskState } from "../types";
-import { TASK_FINISHED_EMOJI } from "../constants";
+import type { AddTaskRequest, ProjectTask, TaskDateField, TaskState } from "../types";
+import { TASK_DUE_EMOJI, TASK_FINISHED_EMOJI, TASK_SCHEDULED_EMOJI, TASK_START_EMOJI } from "../constants";
 import { splitFrontmatter } from "../utils/markdown";
 import { isIsoDate, todayIsoDate } from "../utils/text";
 
 const CHECKBOX_REGEX = /^(\s*)[-*+]\s+\[( |x|X|\/)\]\s*(.*)$/;
 const TASKS_HEADING_REGEX = /^##\s+tasks\b.*$/i;
+const SCHEDULED_REGEX = /⏳\s*(\d{4}-\d{2}-\d{2})/u;
 const START_REGEX = /🛫\s*(\d{4}-\d{2}-\d{2})/u;
 const START_REGEX_GLOBAL = /🛫\s*(\d{4}-\d{2}-\d{2})/gu;
 const DUE_REGEX = /📅\s*(\d{4}-\d{2}-\d{2})/u;
@@ -14,6 +15,7 @@ const FINISHED_REGEX_GLOBAL = /✅\s*(\d{4}-\d{2}-\d{2})/gu;
 const FINISHED_MARKER_REMOVE_REGEX = /\s*✅\s*\d{4}-\d{2}-\d{2}/gu;
 const HAS_FINISHED_MARKER_REGEX = /✅\s*\d{4}-\d{2}-\d{2}/u;
 const HAS_START_MARKER_REGEX = /🛫\s*\d{4}-\d{2}-\d{2}/u;
+const ALL_DATE_MARKERS_REGEX = /\s*[⏳🛫📅✅]\s*\d{4}-\d{2}-\d{2}/gu;
 
 export class TaskParser {
   private readonly app: App;
@@ -51,6 +53,7 @@ export class TaskParser {
       const state = this.markerToState(match[2]);
       const checked = state === "checked";
       const text = match[3];
+      const scheduledDate = this.extractDate(SCHEDULED_REGEX, text);
       const startDate = this.extractDate(START_REGEX, text);
       const dueDate = this.extractDate(DUE_REGEX, text);
       const finishedDate = this.extractDate(FINISHED_REGEX, text);
@@ -65,6 +68,7 @@ export class TaskParser {
         text,
         state,
         checked,
+        scheduledDate,
         startDate,
         dueDate,
         finishedDate,
@@ -114,8 +118,44 @@ export class TaskParser {
     return true;
   }
 
+  async updateTaskDate(file: TFile, task: ProjectTask, field: TaskDateField, value: string | null): Promise<boolean> {
+    if (value && !isIsoDate(value)) {
+      return false;
+    }
+
+    const content = await this.app.vault.read(file);
+    const lines = content.split(/\r?\n/);
+
+    let lineIndex = task.line - 1;
+    if (lineIndex < 0 || lineIndex >= lines.length || !CHECKBOX_REGEX.test(lines[lineIndex])) {
+      lineIndex = lines.findIndex((line) => line === task.rawLine);
+    }
+
+    if (lineIndex < 0 || lineIndex >= lines.length) {
+      return false;
+    }
+
+    const currentLine = lines[lineIndex];
+    const match = currentLine.match(CHECKBOX_REGEX);
+    if (!match) {
+      return false;
+    }
+
+    const indent = match[1];
+    const marker = match[2];
+    const rebuilt = this.rebuildTaskTextWithDateUpdate(match[3], match[2], field, value);
+
+    lines[lineIndex] = `${indent}- [${rebuilt.marker}] ${rebuilt.text}`;
+    await this.app.vault.modify(file, lines.join("\n"));
+    return true;
+  }
+
   async addTask(file: TFile, request: AddTaskRequest): Promise<boolean> {
-    if (!isIsoDate(request.startDate)) {
+    if (!isIsoDate(request.scheduledDate)) {
+      return false;
+    }
+
+    if (request.startDate && !isIsoDate(request.startDate)) {
       return false;
     }
 
@@ -145,8 +185,10 @@ export class TaskParser {
       insertAt -= 1;
     }
 
-    const duePart = request.dueDate ? ` 📅 ${request.dueDate}` : "";
-    const taskLine = `- [ ] ${text} 🛫 ${request.startDate}${duePart}`;
+    const scheduledPart = ` ${TASK_SCHEDULED_EMOJI} ${request.scheduledDate}`;
+    const startPart = request.startDate ? ` ${TASK_START_EMOJI} ${request.startDate}` : "";
+    const duePart = request.dueDate ? ` ${TASK_DUE_EMOJI} ${request.dueDate}` : "";
+    const taskLine = `- [ ] ${text}${scheduledPart}${startPart}${duePart}`;
     lines.splice(insertAt, 0, taskLine);
 
     await this.app.vault.modify(file, `${frontmatter}${lines.join("\n")}`);
@@ -325,7 +367,7 @@ export class TaskParser {
   }
 
   static hasStrictTaskDateMarkers(taskText: string): boolean {
-    const allMatches = [...taskText.matchAll(/[🛫📅✅]\s*(\S+)/gu)];
+    const allMatches = [...taskText.matchAll(/[⏳🛫📅✅]\s*(\S+)/gu)];
 
     return allMatches.every((match) => {
       const maybeDate = match[1];
@@ -359,7 +401,50 @@ export class TaskParser {
       normalized = this.removeFinishedDateMarkers(normalized);
     }
 
-    return `${normalized} 🛫 ${existingStartDate}`.trim();
+    return `${normalized} ${TASK_START_EMOJI} ${existingStartDate}`.trim();
+  }
+
+  private rebuildTaskTextWithDateUpdate(
+    text: string,
+    currentMarker: string,
+    field: TaskDateField,
+    value: string | null,
+  ): { marker: string; text: string } {
+    const dates = {
+      scheduled: this.extractDate(SCHEDULED_REGEX, text),
+      start: this.extractDate(START_REGEX, text),
+      due: this.extractDate(DUE_REGEX, text),
+      finish: this.extractDate(FINISHED_REGEX, text),
+    };
+
+    dates[field] = value;
+
+    const baseText = text.replace(ALL_DATE_MARKERS_REGEX, "").replace(/\s{2,}/g, " ").trim();
+    const parts = [baseText];
+
+    if (dates.scheduled) {
+      parts.push(`${TASK_SCHEDULED_EMOJI} ${dates.scheduled}`);
+    }
+
+    if (dates.start) {
+      parts.push(`${TASK_START_EMOJI} ${dates.start}`);
+    }
+
+    if (dates.due) {
+      parts.push(`${TASK_DUE_EMOJI} ${dates.due}`);
+    }
+
+    if (dates.finish) {
+      parts.push(`${TASK_FINISHED_EMOJI} ${dates.finish}`);
+    }
+
+    const nextText = parts.filter((part) => part.length > 0).join(" ").trim();
+    const marker = field === "finish" && value === null ? " " : currentMarker;
+
+    return {
+      marker,
+      text: nextText,
+    };
   }
 
   private findTasksHeadingIndex(lines: string[]): number {

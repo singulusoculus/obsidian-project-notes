@@ -354,13 +354,114 @@
 .opn-badge-select {
   min-width: 0 !important;
   width: auto;
-  border: 1px solid var(--background-modifier-border-hover);
-  border-radius: 999px;
-  padding: 2px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0;
   font-size: 0.78rem;
   font-weight: 600;
   line-height: 1.25;
   cursor: pointer;
+  background: transparent;
+  box-shadow: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.opn-grid-inline-editor {
+  min-height: 1.9rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  box-shadow: none;
+  outline: none;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    padding 120ms ease,
+    color 120ms ease;
+}
+
+.opn-grid-inline-editor:hover,
+.opn-grid-inline-editor:focus,
+.opn-grid-inline-editor:focus-visible {
+  background: var(--background-modifier-form-field);
+  border-color: var(--background-modifier-border-hover);
+  padding: 2px 8px;
+}
+
+.opn-grid-inline-editor.opn-status-badge,
+.opn-grid-inline-editor.opn-priority-badge {
+  background: transparent;
+  padding: 2px 8px;
+}
+
+.opn-grid-inline-editor.opn-status-badge:hover,
+.opn-grid-inline-editor.opn-status-badge:focus,
+.opn-grid-inline-editor.opn-status-badge:focus-visible,
+.opn-grid-inline-editor.opn-priority-badge:hover,
+.opn-grid-inline-editor.opn-priority-badge:focus,
+.opn-grid-inline-editor.opn-priority-badge:focus-visible {
+  background: var(--background-secondary-alt);
+  padding: 2px 8px;
+}
+
+.opn-grid-date-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0;
+  background: none;
+  border: none;
+}
+
+input[type='date'] {
+  background: none;
+  border: none;
+}
+
+input[type="date"].is-empty:not(:hover):not(:focus):not(:active)::-webkit-datetime-edit-text,
+input[type="date"].is-empty:not(:hover):not(:focus):not(:active)::-webkit-datetime-edit-month-field,
+input[type="date"].is-empty:not(:hover):not(:focus):not(:active)::-webkit-datetime-edit-day-field,
+input[type="date"].is-empty:not(:hover):not(:focus):not(:active)::-webkit-datetime-edit-year-field {
+  color: transparent;
+}
+
+.opn-grid-date-input.opn-status-badge:hover,
+.opn-grid-date-input.opn-status-badge:focus,
+.opn-grid-date-input.opn-status-badge:focus-visible,
+.opn-grid-date-input.opn-priority-badge:hover,
+.opn-grid-date-input.opn-priority-badge:focus,
+.opn-grid-date-input.opn-priority-badge:focus-visible {
+  background: var(--background-modifier-form-field);
+  border: var(--input-border-width) solid var(--background-modifier-border) ;
+}
+
+/* .opn-grid-date-input.is-empty:not(:hover):not(:focus):not(:focus-visible)::-webkit-datetime-edit {
+  color: transparent;
+}
+
+.opn-grid-date-input::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  pointer-events: none;
+} */
+
+.opn-grid-date-input:hover::-webkit-calendar-picker-indicator,
+.opn-grid-date-input:focus::-webkit-calendar-picker-indicator,
+.opn-grid-date-input:focus-visible::-webkit-calendar-picker-indicator {
+  opacity: 0.7;
+  pointer-events: auto;
+}
+
+.opn-grid-date-input.is-empty:not(:hover):not(:focus):not(:focus-visible)::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.opn-grid-date-input:hover::-webkit-calendar-picker-indicator,
+.opn-grid-date-input:focus::-webkit-calendar-picker-indicator,
+.opn-grid-date-input:focus-visible::-webkit-calendar-picker-indicator {
+  opacity: 0.7;
+  pointer-events: auto;
 }
 
 .opn-status-badge {

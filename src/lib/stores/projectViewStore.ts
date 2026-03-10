@@ -7,6 +7,7 @@ import type {
   ProjectMetadataUpdate,
   ProjectSettings,
   ProjectSortField,
+  TaskDateField,
   TaskState,
   ProjectViewState,
   SortDirection,
@@ -35,6 +36,7 @@ const RESERVED_PROJECT_COLUMN_PROPERTY_KEYS = new Set<string>([
   "aliases",
   "status",
   "priority",
+  "scheduled-date",
   "start-date",
   "finish-date",
   "due-date",
@@ -353,6 +355,10 @@ export class ProjectViewStore {
 
   async setTaskState(taskId: string, state: TaskState): Promise<void> {
     await this.indexService.toggleTask({ taskId, state });
+  }
+
+  async setTaskDate(taskId: string, field: TaskDateField, value: string | null): Promise<void> {
+    await this.indexService.updateTaskDate({ taskId, field, value });
   }
 
   async setProjectGridColumns(columnIds: string[]): Promise<void> {

@@ -70,6 +70,11 @@
         "name": "requester",
         "type": "multitext",
         "defaultValue": ""
+      },
+      {
+        "name": "scheduled-date",
+        "type": "date",
+        "defaultValue": ""
       }
     ],
     "gridColumnsByArea": {
@@ -78,6 +83,7 @@
         "status",
         "priority",
         "timing-status",
+        "scheduled-date",
         "start-date",
         "finish-date",
         "due-date",
@@ -98,8 +104,7 @@
         "name",
         "timing-status",
         "priority",
-        "next-tasks",
-        "notes"
+        "next-tasks"
       ]
     },
     "kanbanCardDefaultNextTaskCount": 1,
@@ -125,8 +130,8 @@
     "cacheReconcileMinutes": 10
   },
   "snapshot": {
-    "version": 5,
-    "generatedAt": 1773064317400,
+    "version": 6,
+    "generatedAt": 1773154722047,
     "projects": [
       {
         "path": "Test Area/Another Project.md",
@@ -138,6 +143,7 @@
         "status": "Awaiting Response",
         "statusIsUnknown": false,
         "priority": "🔵 Low",
+        "scheduledDate": "2026-03-10",
         "startDate": null,
         "finishDate": null,
         "dueDate": null,
@@ -152,25 +158,8 @@
         },
         "notesSectionText": "- This is a test note.",
         "createdAt": 1772742547198,
-        "updatedAt": 1773002891077,
+        "updatedAt": 1773154643137,
         "tasks": [
-          {
-            "id": "Test Area/Another Project.md:19",
-            "projectPath": "Test Area/Another Project.md",
-            "projectName": "Another Project",
-            "projectRequester": [
-              "[[Person A]]",
-              "[[Person B]]"
-            ],
-            "line": 19,
-            "text": "This is a test task 🛫 2026-03-05 📅 2026-03-06 ✅ 2026-03-05",
-            "state": "checked",
-            "checked": true,
-            "startDate": "2026-03-05",
-            "dueDate": "2026-03-06",
-            "finishedDate": "2026-03-05",
-            "rawLine": "- [x] This is a test task 🛫 2026-03-05 📅 2026-03-06 ✅ 2026-03-05"
-          },
           {
             "id": "Test Area/Another Project.md:20",
             "projectPath": "Test Area/Another Project.md",
@@ -180,13 +169,14 @@
               "[[Person B]]"
             ],
             "line": 20,
-            "text": "This is another task 🛫 2026-03-05 📅 2026-03-06 ✅ 2026-03-05",
+            "text": "This is a test task 🛫 2026-03-05 📅 2026-03-06 ✅ 2026-03-05",
             "state": "checked",
             "checked": true,
+            "scheduledDate": null,
             "startDate": "2026-03-05",
             "dueDate": "2026-03-06",
             "finishedDate": "2026-03-05",
-            "rawLine": "- [x] This is another task 🛫 2026-03-05 📅 2026-03-06 ✅ 2026-03-05"
+            "rawLine": "- [x] This is a test task 🛫 2026-03-05 📅 2026-03-06 ✅ 2026-03-05"
           },
           {
             "id": "Test Area/Another Project.md:21",
@@ -197,13 +187,14 @@
               "[[Person B]]"
             ],
             "line": 21,
-            "text": "Testing in progress 🛫 2026-03-05 ✅ 2026-03-06",
+            "text": "This is another task 🛫 2026-03-05 📅 2026-03-06 ✅ 2026-03-05",
             "state": "checked",
             "checked": true,
+            "scheduledDate": null,
             "startDate": "2026-03-05",
-            "dueDate": null,
-            "finishedDate": "2026-03-06",
-            "rawLine": "- [x] Testing in progress 🛫 2026-03-05 ✅ 2026-03-06"
+            "dueDate": "2026-03-06",
+            "finishedDate": "2026-03-05",
+            "rawLine": "- [x] This is another task 🛫 2026-03-05 📅 2026-03-06 ✅ 2026-03-05"
           },
           {
             "id": "Test Area/Another Project.md:22",
@@ -214,9 +205,28 @@
               "[[Person B]]"
             ],
             "line": 22,
+            "text": "Testing in progress 🛫 2026-03-05 ✅ 2026-03-06",
+            "state": "checked",
+            "checked": true,
+            "scheduledDate": null,
+            "startDate": "2026-03-05",
+            "dueDate": null,
+            "finishedDate": "2026-03-06",
+            "rawLine": "- [x] Testing in progress 🛫 2026-03-05 ✅ 2026-03-06"
+          },
+          {
+            "id": "Test Area/Another Project.md:23",
+            "projectPath": "Test Area/Another Project.md",
+            "projectName": "Another Project",
+            "projectRequester": [
+              "[[Person A]]",
+              "[[Person B]]"
+            ],
+            "line": 23,
             "text": "Timing Test ",
             "state": "unchecked",
             "checked": false,
+            "scheduledDate": null,
             "startDate": null,
             "dueDate": null,
             "finishedDate": null,
@@ -231,9 +241,10 @@
         "displayName": "DAte test",
         "areaId": "area-1772741878315-uiunz0",
         "areaName": "Test",
-        "status": "Cancelled",
+        "status": "Doing",
         "statusIsUnknown": false,
         "priority": "🟢 Medium",
+        "scheduledDate": "2026-03-10",
         "startDate": "2026-03-05",
         "finishDate": null,
         "dueDate": null,
@@ -245,8 +256,39 @@
         },
         "notesSectionText": "",
         "createdAt": 1772748698440,
-        "updatedAt": 1773023253218,
-        "tasks": []
+        "updatedAt": 1773154721242,
+        "tasks": [
+          {
+            "id": "Test Area/DAte test.md:16",
+            "projectPath": "Test Area/DAte test.md",
+            "projectName": "DAte test",
+            "projectRequester": [],
+            "line": 16,
+            "text": "This is a test ⏳ 2026-03-10 🛫 2026-03-10 📅 2026-03-11",
+            "state": "unchecked",
+            "checked": false,
+            "scheduledDate": "2026-03-10",
+            "startDate": "2026-03-10",
+            "dueDate": "2026-03-11",
+            "finishedDate": null,
+            "rawLine": "- [ ] This is a test ⏳ 2026-03-10 🛫 2026-03-10 📅 2026-03-11"
+          },
+          {
+            "id": "Test Area/DAte test.md:17",
+            "projectPath": "Test Area/DAte test.md",
+            "projectName": "DAte test",
+            "projectRequester": [],
+            "line": 17,
+            "text": "Scheduled date test ⏳ 2026-03-12",
+            "state": "unchecked",
+            "checked": false,
+            "scheduledDate": "2026-03-12",
+            "startDate": null,
+            "dueDate": null,
+            "finishedDate": null,
+            "rawLine": "- [ ] Scheduled date test ⏳ 2026-03-12"
+          }
+        ]
       },
       {
         "path": "Test Area/Test 1.md",
@@ -258,6 +300,7 @@
         "status": "To Do",
         "statusIsUnknown": false,
         "priority": "🔵 Low",
+        "scheduledDate": null,
         "startDate": "2026-03-08",
         "finishDate": null,
         "dueDate": null,
@@ -269,7 +312,7 @@
         },
         "notesSectionText": "",
         "createdAt": 1773000155122,
-        "updatedAt": 1773002891056,
+        "updatedAt": 1773091975328,
         "tasks": []
       },
       {
@@ -282,6 +325,7 @@
         "status": "To Do",
         "statusIsUnknown": false,
         "priority": "🔵 Low",
+        "scheduledDate": null,
         "startDate": "2026-03-08",
         "finishDate": null,
         "dueDate": null,
@@ -293,7 +337,7 @@
         },
         "notesSectionText": "",
         "createdAt": 1773000206463,
-        "updatedAt": 1773002890991,
+        "updatedAt": 1773091975263,
         "tasks": []
       },
       {
@@ -306,6 +350,7 @@
         "status": "To Do",
         "statusIsUnknown": false,
         "priority": "🔵 Low",
+        "scheduledDate": null,
         "startDate": "2026-03-08",
         "finishDate": null,
         "dueDate": null,
@@ -317,7 +362,7 @@
         },
         "notesSectionText": "",
         "createdAt": 1773000158921,
-        "updatedAt": 1773002891051,
+        "updatedAt": 1773091975323,
         "tasks": []
       },
       {
@@ -330,6 +375,7 @@
         "status": "To Do",
         "statusIsUnknown": false,
         "priority": "🔵 Low",
+        "scheduledDate": null,
         "startDate": "2026-03-08",
         "finishDate": null,
         "dueDate": null,
@@ -341,7 +387,7 @@
         },
         "notesSectionText": "",
         "createdAt": 1773000164222,
-        "updatedAt": 1773002891046,
+        "updatedAt": 1773091975316,
         "tasks": []
       },
       {
@@ -354,6 +400,7 @@
         "status": "To Do",
         "statusIsUnknown": false,
         "priority": "🔵 Low",
+        "scheduledDate": null,
         "startDate": "2026-03-08",
         "finishDate": null,
         "dueDate": null,
@@ -365,7 +412,7 @@
         },
         "notesSectionText": "",
         "createdAt": 1773000169113,
-        "updatedAt": 1773002891042,
+        "updatedAt": 1773091975320,
         "tasks": []
       },
       {
@@ -378,6 +425,7 @@
         "status": "To Do",
         "statusIsUnknown": false,
         "priority": "🔵 Low",
+        "scheduledDate": null,
         "startDate": "2026-03-08",
         "finishDate": null,
         "dueDate": null,
@@ -389,7 +437,7 @@
         },
         "notesSectionText": "",
         "createdAt": 1773000172323,
-        "updatedAt": 1773002891037,
+        "updatedAt": 1773091975314,
         "tasks": []
       },
       {
@@ -402,6 +450,7 @@
         "status": "To Do",
         "statusIsUnknown": false,
         "priority": "🔵 Low",
+        "scheduledDate": null,
         "startDate": "2026-03-08",
         "finishDate": null,
         "dueDate": null,
@@ -413,7 +462,7 @@
         },
         "notesSectionText": "",
         "createdAt": 1773000175601,
-        "updatedAt": 1773002891030,
+        "updatedAt": 1773091975310,
         "tasks": []
       },
       {
@@ -426,6 +475,7 @@
         "status": "To Do",
         "statusIsUnknown": false,
         "priority": "🔵 Low",
+        "scheduledDate": null,
         "startDate": "2026-03-08",
         "finishDate": null,
         "dueDate": null,
@@ -437,7 +487,7 @@
         },
         "notesSectionText": "",
         "createdAt": 1773000179167,
-        "updatedAt": 1773002891019,
+        "updatedAt": 1773091975307,
         "tasks": []
       },
       {
@@ -450,6 +500,7 @@
         "status": "To Do",
         "statusIsUnknown": false,
         "priority": "🔵 Low",
+        "scheduledDate": null,
         "startDate": "2026-03-08",
         "finishDate": null,
         "dueDate": null,
@@ -461,7 +512,7 @@
         },
         "notesSectionText": "",
         "createdAt": 1773000183868,
-        "updatedAt": 1773002891014,
+        "updatedAt": 1773091975274,
         "tasks": []
       },
       {
@@ -474,6 +525,7 @@
         "status": "To Do",
         "statusIsUnknown": false,
         "priority": "🔵 Low",
+        "scheduledDate": null,
         "startDate": "2026-03-08",
         "finishDate": null,
         "dueDate": "2026-03-07",
@@ -485,7 +537,7 @@
         },
         "notesSectionText": "",
         "createdAt": 1773000187070,
-        "updatedAt": 1773004763076,
+        "updatedAt": 1773091975288,
         "tasks": []
       },
       {
@@ -498,6 +550,7 @@
         "status": "Doing",
         "statusIsUnknown": false,
         "priority": "🟢 Medium",
+        "scheduledDate": null,
         "startDate": "2026-03-05",
         "finishDate": null,
         "dueDate": "2026-03-07",
@@ -509,17 +562,18 @@
         },
         "notesSectionText": "- Some notes. \n- Some more. \n- It looks like the grid is refreshing when any thing in the note changes. It should only refresh when tasks or properties change\n- Testing for the jumpiness again \n- Test\n- Some notes. \n- Some more. \n- It looks like the grid is refreshing when any thing in the note changes. It should only refresh when tasks or properties change\n- Testing for the jumpiness again \n- Test\n- Some notes. \n- Some more. \n- It looks like the grid is refreshing when any thing in the note changes. It should only refresh when tasks or properties change\n- Testing for the jumpiness again \n- Test",
         "createdAt": 1772742226623,
-        "updatedAt": 1773023101696,
+        "updatedAt": 1773091975298,
         "tasks": [
           {
-            "id": "Test Area/Test Project.md:16",
+            "id": "Test Area/Test Project.md:17",
             "projectPath": "Test Area/Test Project.md",
             "projectName": "Test Project",
             "projectRequester": [],
-            "line": 16,
+            "line": 17,
             "text": "Another test task 🛫 2026-03-05 📅 2026-03-06",
             "state": "in-progress",
             "checked": false,
+            "scheduledDate": null,
             "startDate": "2026-03-05",
             "dueDate": "2026-03-06",
             "finishedDate": null,
@@ -537,6 +591,7 @@
         "status": "Doing",
         "statusIsUnknown": false,
         "priority": "🔵 Low",
+        "scheduledDate": null,
         "startDate": "2026-03-06",
         "finishDate": null,
         "dueDate": null,
@@ -548,7 +603,7 @@
         },
         "notesSectionText": "",
         "createdAt": 1772815815238,
-        "updatedAt": 1773002891067,
+        "updatedAt": 1773091975224,
         "tasks": []
       },
       {
@@ -561,6 +616,7 @@
         "status": "Doing",
         "statusIsUnknown": false,
         "priority": "🟢 Medium",
+        "scheduledDate": null,
         "startDate": null,
         "finishDate": null,
         "dueDate": null,
@@ -572,35 +628,22 @@
         },
         "notesSectionText": "",
         "createdAt": 1772746116481,
-        "updatedAt": 1773005531273,
+        "updatedAt": 1773091975251,
         "tasks": [
-          {
-            "id": "Test Area/Waht is this?.md:16",
-            "projectPath": "Test Area/Waht is this?.md",
-            "projectName": "Waht is this?",
-            "projectRequester": [],
-            "line": 16,
-            "text": "Testing 🛫 2026-03-05 📅 2026-03-05",
-            "state": "unchecked",
-            "checked": false,
-            "startDate": "2026-03-05",
-            "dueDate": "2026-03-05",
-            "finishedDate": null,
-            "rawLine": "- [ ] Testing 🛫 2026-03-05 📅 2026-03-05"
-          },
           {
             "id": "Test Area/Waht is this?.md:17",
             "projectPath": "Test Area/Waht is this?.md",
             "projectName": "Waht is this?",
             "projectRequester": [],
             "line": 17,
-            "text": "Test 2 🛫 2026-03-05 📅 2026-03-05",
+            "text": "Testing 🛫 2026-03-05 📅 2026-03-05",
             "state": "unchecked",
             "checked": false,
+            "scheduledDate": null,
             "startDate": "2026-03-05",
             "dueDate": "2026-03-05",
             "finishedDate": null,
-            "rawLine": "- [ ] Test 2 🛫 2026-03-05 📅 2026-03-05"
+            "rawLine": "- [ ] Testing 🛫 2026-03-05 📅 2026-03-05"
           },
           {
             "id": "Test Area/Waht is this?.md:18",
@@ -608,13 +651,14 @@
             "projectName": "Waht is this?",
             "projectRequester": [],
             "line": 18,
-            "text": "Test 3 🛫 2026-03-04 📅 2026-03-05",
+            "text": "Test 2 🛫 2026-03-05 📅 2026-03-05",
             "state": "unchecked",
             "checked": false,
-            "startDate": "2026-03-04",
+            "scheduledDate": null,
+            "startDate": "2026-03-05",
             "dueDate": "2026-03-05",
             "finishedDate": null,
-            "rawLine": "- [ ] Test 3 🛫 2026-03-04 📅 2026-03-05"
+            "rawLine": "- [ ] Test 2 🛫 2026-03-05 📅 2026-03-05"
           },
           {
             "id": "Test Area/Waht is this?.md:19",
@@ -622,13 +666,14 @@
             "projectName": "Waht is this?",
             "projectRequester": [],
             "line": 19,
-            "text": "Test 4 🛫 2026-03-05 📅 2026-03-05",
+            "text": "Test 3 🛫 2026-03-04 📅 2026-03-05",
             "state": "unchecked",
             "checked": false,
-            "startDate": "2026-03-05",
+            "scheduledDate": null,
+            "startDate": "2026-03-04",
             "dueDate": "2026-03-05",
             "finishedDate": null,
-            "rawLine": "- [ ] Test 4 🛫 2026-03-05 📅 2026-03-05"
+            "rawLine": "- [ ] Test 3 🛫 2026-03-04 📅 2026-03-05"
           },
           {
             "id": "Test Area/Waht is this?.md:20",
@@ -636,13 +681,14 @@
             "projectName": "Waht is this?",
             "projectRequester": [],
             "line": 20,
-            "text": "Test 5 🛫 2026-03-05 📅 2026-03-05",
+            "text": "Test 4 🛫 2026-03-05 📅 2026-03-05",
             "state": "unchecked",
             "checked": false,
+            "scheduledDate": null,
             "startDate": "2026-03-05",
             "dueDate": "2026-03-05",
             "finishedDate": null,
-            "rawLine": "- [ ] Test 5 🛫 2026-03-05 📅 2026-03-05"
+            "rawLine": "- [ ] Test 4 🛫 2026-03-05 📅 2026-03-05"
           },
           {
             "id": "Test Area/Waht is this?.md:21",
@@ -650,13 +696,14 @@
             "projectName": "Waht is this?",
             "projectRequester": [],
             "line": 21,
-            "text": "Test 6 🛫 2026-03-05 📅 2026-03-04",
+            "text": "Test 5 🛫 2026-03-05 📅 2026-03-05",
             "state": "unchecked",
             "checked": false,
+            "scheduledDate": null,
             "startDate": "2026-03-05",
-            "dueDate": "2026-03-04",
+            "dueDate": "2026-03-05",
             "finishedDate": null,
-            "rawLine": "- [ ] Test 6 🛫 2026-03-05 📅 2026-03-04"
+            "rawLine": "- [ ] Test 5 🛫 2026-03-05 📅 2026-03-05"
           },
           {
             "id": "Test Area/Waht is this?.md:22",
@@ -664,9 +711,25 @@
             "projectName": "Waht is this?",
             "projectRequester": [],
             "line": 22,
+            "text": "Test 6 🛫 2026-03-05 📅 2026-03-04",
+            "state": "unchecked",
+            "checked": false,
+            "scheduledDate": null,
+            "startDate": "2026-03-05",
+            "dueDate": "2026-03-04",
+            "finishedDate": null,
+            "rawLine": "- [ ] Test 6 🛫 2026-03-05 📅 2026-03-04"
+          },
+          {
+            "id": "Test Area/Waht is this?.md:23",
+            "projectPath": "Test Area/Waht is this?.md",
+            "projectName": "Waht is this?",
+            "projectRequester": [],
+            "line": 23,
             "text": "Test 7 🛫 2026-03-05 📅 2026-03-05",
             "state": "unchecked",
             "checked": false,
+            "scheduledDate": null,
             "startDate": "2026-03-05",
             "dueDate": "2026-03-05",
             "finishedDate": null,
@@ -684,6 +747,7 @@
         "status": "To Do",
         "statusIsUnknown": false,
         "priority": "🔥 High",
+        "scheduledDate": null,
         "startDate": null,
         "finishDate": null,
         "dueDate": null,
@@ -695,17 +759,18 @@
         },
         "notesSectionText": "",
         "createdAt": 1772748553354,
-        "updatedAt": 1773001620173,
+        "updatedAt": 1773091975239,
         "tasks": [
           {
-            "id": "Test Area/Who done it?.md:16",
+            "id": "Test Area/Who done it?.md:17",
             "projectPath": "Test Area/Who done it?.md",
             "projectName": "Who done it?",
             "projectRequester": [],
-            "line": 16,
+            "line": 17,
             "text": "This is a task - duh 🛫 2026-03-06 📅 2026-03-13",
             "state": "unchecked",
             "checked": false,
+            "scheduledDate": null,
             "startDate": "2026-03-06",
             "dueDate": "2026-03-13",
             "finishedDate": null,

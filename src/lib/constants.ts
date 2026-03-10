@@ -19,6 +19,7 @@ export const DEFAULT_PRIORITIES = ["Low", "Medium", "High"];
 export const LOCKED_PROPERTY_DEFAULTS: ProjectPropertyTemplate[] = [
   { name: "status", type: "multitext", defaultValue: "To Do" },
   { name: "priority", type: "multitext", defaultValue: "Medium" },
+  { name: "scheduled-date", type: "date", defaultValue: "" },
   { name: "start-date", type: "date", defaultValue: "" },
   { name: "finish-date", type: "date", defaultValue: "" },
   { name: "due-date", type: "date", defaultValue: "" },
@@ -59,6 +60,7 @@ export const PROJECT_GRID_BASE_COLUMNS: ProjectGridColumn[] = [
   { id: "status", label: "Status", kind: "base", sortable: true, sortField: "status" },
   { id: "priority", label: "Priority", kind: "base", sortable: true, sortField: "priority" },
   { id: "timing-status", label: "Timing", kind: "base", sortable: true, sortField: "timing-status" },
+  { id: "scheduled-date", label: "Scheduled", kind: "base", sortable: true, sortField: "scheduled-date" },
   { id: "start-date", label: "Start", kind: "base", sortable: true, sortField: "start-date" },
   { id: "finish-date", label: "Finish", kind: "base", sortable: true, sortField: "finish-date" },
   { id: "due-date", label: "Due", kind: "base", sortable: true, sortField: "due-date" },
@@ -71,6 +73,7 @@ export const KANBAN_CARD_BASE_FIELDS: KanbanCardField[] = [
   { id: "name", label: "Name", kind: "base" },
   { id: "timing-status", label: "Timing Status", kind: "base" },
   { id: "priority", label: "Priority", kind: "base" },
+  { id: "scheduled-date", label: "Scheduled Date", kind: "base" },
   { id: "start-date", label: "Start Date", kind: "base" },
   { id: "due-date", label: "Due Date", kind: "base" },
   { id: "finish-date", label: "Finish Date", kind: "base" },
@@ -104,8 +107,9 @@ export const DEFAULT_SETTINGS: ProjectSettings = {
   cacheReconcileMinutes: 10,
 };
 
-export const SNAPSHOT_VERSION = 5;
+export const SNAPSHOT_VERSION = 6;
 
+export const TASK_SCHEDULED_EMOJI = "⏳";
 export const TASK_START_EMOJI = "🛫";
 export const TASK_DUE_EMOJI = "📅";
 export const TASK_FINISHED_EMOJI = "✅";

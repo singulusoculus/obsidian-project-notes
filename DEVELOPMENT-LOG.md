@@ -2,23 +2,41 @@
 
 - This document is for brief descriptions of work done and lessons learned.
 - Structure:
-  - `##` = version tag
-  - `###` = commit
+  - `##` = version tag or `Untagged Version`
+  - `###` = commit or `Uncommitted Work`
   - `####` = day
-- Only create `##` when a new version tag is created.
-- Only create `###` when a new commit is created.
-- Use `#### YYYY.MM.DD (uncommitted work)` for work not yet committed.
+- Use `## Untagged Version` for the current untagged history above tagged versions.
+- Use `### Uncommitted Work` for current uncommitted work under `## Untagged Version`.
+- Do not log changes made solely to `DEVELOPMENT-LOG.md` itself.
 - Keep newest items first.
 
-#### 2026.03.09 (uncommitted work)
-- Normalized the development log structure to match the git-driven hierarchy in `AGENTS.md` and verified that `v0.0.4` is visible on `HEAD`.
+## Untagged Version
+### Uncommitted Work
+#### 2026.03.10
+- Refined grid date input styling so empty date fields hide the native `mm/dd/yyyy` hint text and calendar picker icon until hover or focus, keeping blank cells visually clean while preserving inline editing.
 
-#### 2026.03.08 (uncommitted work)
+#### 2026.03.09
+- Added first-class `Scheduled` date support for projects and tasks.
+- Added locked `scheduled-date` project property support across settings, type syncing, project sorting, grid columns, and Kanban card field options.
+- Updated task parsing and creation so tasks read/write `⏳ YYYY-MM-DD` for Scheduled, keep `🛫` as actual Start, and capture Scheduled separately in the Add Task flow.
+- Updated project/task timing logic to use `Scheduled` as the planned start date with fallback to `Start` for older notes, then verified the changes with `npm run build`.
+- Made project date fields editable inline in the Projects grid with native date pickers that write back to note frontmatter.
+- Made task date fields editable inline in the Tasks grid with native date pickers that rewrite task emoji date markers in the note body.
+- Added editable task `Finish` dates in the Tasks grid without forcing checkbox changes, except clearing `Finish` now resets the task checkbox state to empty.
+- Changed grid editors so status, priority, and date fields render as plain display values by default and only reveal their editable controls on hover or focus, while empty date cells stay visually blank until interaction.
+- Simplified grid editor rendering to use a single control per editable cell, styled as plain text by default and only showing input chrome on hover/focus so hidden editors no longer consume duplicate visual space.
+
+### b8b7305 Fixed Kanban drag ghost sizing; update AGENT instructions for dev log
+#### 2026.03.08
 - Fixed Kanban drag ghost sizing for cards with collapsed Notes previews.
   - drag preview now uses a clipped custom drag image sized to the card’s visible bounding box
   - prevents drag ghost from expanding to hidden/collapsed Notes content height
 - Updated hidden Kanban status drop zones to include item counts in the label (for example `Done (23)`).
 - Verified the changes compile successfully with `npm run build`.
+- Updated Kanban card Next Task label to be count-aware.
+  - now shows `Next Task` when one task is displayed
+  - now shows `Next X Tasks` when multiple are displayed
+  - appends `(out of Y)` when only a subset is shown due to the configured next-task limit
 
 ## v0.0.4
 ### 85aad9c Kanban stuff; update to v0.0.4
@@ -62,11 +80,6 @@
   - added a new global setting `Kanban notes preview lines` (default `5`)
   - Notes now show `Read More` when content exceeds either the configured word limit or the line-limit/preview overflow
   - preview max-height now scales with the configured line threshold
-- Updated Kanban card Next Task label to be count-aware.
-  - now shows `Next Task` when one task is displayed
-  - now shows `Next X Tasks` when multiple are displayed
-  - appends `(out of Y)` when only a subset is shown due to the configured next-task limit
-
 
 #### 2026.03.06
 - Reworked Projects-grid expanded task filtering:

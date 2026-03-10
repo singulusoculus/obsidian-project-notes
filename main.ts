@@ -110,6 +110,7 @@ const RESERVED_KANBAN_CARD_PROPERTY_KEYS = new Set<string>([
   "aliases",
   "status",
   "priority",
+  "scheduled-date",
   "start-date",
   "finish-date",
   "due-date",
@@ -409,6 +410,7 @@ class AddTaskModal extends Modal {
   private projectSelectEl: HTMLSelectElement | null = null;
   private projectPickerPointerHandler: ((event: PointerEvent) => void) | null = null;
   private taskInput: TextComponent | null = null;
+  private scheduledDateInput: HTMLInputElement | null = null;
   private startDateInput: HTMLInputElement | null = null;
   private dueDateInput: HTMLInputElement | null = null;
   private submitted = false;
@@ -505,13 +507,22 @@ class AddTaskModal extends Modal {
     this.taskInput.inputEl.id = "opn-task-text";
     this.taskInput.setPlaceholder("Task description");
 
+    const scheduledWrapper = contentEl.createDiv({ cls: "opn-modal-field" });
+    scheduledWrapper.createEl("label", { text: "Scheduled Date", attr: { for: "opn-task-scheduled-date" } });
+    this.scheduledDateInput = scheduledWrapper.createEl("input", {
+      attr: {
+        id: "opn-task-scheduled-date",
+        type: "date",
+        value: todayIsoDate(),
+      },
+    });
+
     const startWrapper = contentEl.createDiv({ cls: "opn-modal-field" });
     startWrapper.createEl("label", { text: "Start Date", attr: { for: "opn-task-start-date" } });
     this.startDateInput = startWrapper.createEl("input", {
       attr: {
         id: "opn-task-start-date",
         type: "date",
-        value: todayIsoDate(),
       },
     });
 
@@ -538,8 +549,15 @@ class AddTaskModal extends Modal {
         return;
       }
 
-      const startDate = this.startDateInput?.value.trim() ?? "";
-      if (!isIsoDate(startDate)) {
+      const scheduledDate = this.scheduledDateInput?.value.trim() ?? "";
+      if (!isIsoDate(scheduledDate)) {
+        new Notice("Scheduled date must be a valid date.");
+        return;
+      }
+
+      const rawStartDate = this.startDateInput?.value.trim() ?? "";
+      const startDate = rawStartDate.length > 0 ? rawStartDate : null;
+      if (startDate && !isIsoDate(startDate)) {
         new Notice("Start date must be a valid date.");
         return;
       }
@@ -555,6 +573,7 @@ class AddTaskModal extends Modal {
       this.resolve({
         projectPath: this.selectedProjectPath,
         text,
+        scheduledDate,
         startDate,
         dueDate,
       });
@@ -823,6 +842,7 @@ class ProjectNotesSettingTab extends PluginSettingTab {
           .addOption("status", "Status")
           .addOption("priority", "Priority")
           .addOption("timing-status", "Timing Status")
+          .addOption("scheduled-date", "Scheduled Date")
           .addOption("start-date", "Start Date")
           .addOption("finish-date", "Finish Date")
           .addOption("due-date", "Due Date")

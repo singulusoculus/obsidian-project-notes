@@ -1,9 +1,11 @@
 <script lang="ts">
   import { fromStore } from "svelte/store";
   import type {
+    ProjectMetadataKey,
     ProjectGridColumn,
     ProjectNote,
     ProjectSortField,
+    TaskDateField,
     ProjectTask,
     SortDirection,
     TaskState,
@@ -22,7 +24,7 @@
     hideable?: boolean;
   }
 
-  type TaskSortField = "state" | "task" | "project" | "requester" | "start" | "due" | "timing";
+  type TaskSortField = "state" | "task" | "project" | "requester" | "scheduled" | "start" | "due" | "finish" | "timing";
   type ProjectsViewMode = "project-task" | "parent-child";
   type TaskStatusFilterOption = "To Do" | "Doing" | "Done";
   type TaskTimingFilterOption = "Current" | "Due" | "Overdue" | "Tomorrow" | "Future" | "Needs Timing";
@@ -50,12 +52,14 @@
     { id: "task", label: "Task", sortField: "task", hideable: false },
     { id: "project", label: "Project", sortField: "project", hideable: true },
     { id: "requester", label: "Requester", sortField: "requester", hideable: true },
+    { id: "scheduled", label: "Scheduled", sortField: "scheduled", hideable: true },
     { id: "start", label: "Start", sortField: "start", hideable: true },
     { id: "due", label: "Due", sortField: "due", hideable: true },
+    { id: "finish", label: "Finish", sortField: "finish", hideable: true },
     { id: "timing", label: "Timing Status", sortField: "timing", hideable: true },
   ];
 
-  const TASK_DATE_TOKEN_REGEX = /(?:🛫|📅|✅)\s*\d{4}-\d{2}-\d{2}/gu;
+  const TASK_DATE_TOKEN_REGEX = /(?:⏳|🛫|📅|✅)\s*\d{4}-\d{2}-\d{2}/gu;
   const WIKI_LINK_REGEX = /\[\[([^\]]+)\]\]/gu;
   const MARKDOWN_EXTERNAL_LINK_REGEX = /\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^)]+)\)/giu;
   const EXTERNAL_URL_REGEX = /\b(?:https?:\/\/|mailto:)[^\s<>()]+/giu;
@@ -369,18 +373,23 @@
     return normalized === "done" || normalized === "cancelled" || normalized === "canceled";
   }
 
+  function plannedStartDate(scheduledDate: string | null, startDate: string | null): string | null {
+    return scheduledDate ?? startDate;
+  }
+
   function taskTimingStatuses(task: ProjectTask): TaskTimingFilterOption[] {
     const timing: TaskTimingFilterOption[] = [];
     const today = relativeLocalIsoDate(0);
     const tomorrow = relativeLocalIsoDate(1);
     const projectStatus = state.projectStatusByPath[task.projectPath];
+    const timingStartDate = plannedStartDate(task.scheduledDate, task.startDate);
 
     if (
       !task.checked &&
       !isTerminalProjectStatus(projectStatus) &&
-      task.startDate &&
+      timingStartDate &&
       task.dueDate &&
-      task.startDate <= today &&
+      timingStartDate <= today &&
       today <= task.dueDate
     ) {
       timing.push("Current");
@@ -394,15 +403,15 @@
       timing.push("Overdue");
     }
 
-    if (task.startDate === tomorrow) {
+    if (timingStartDate === tomorrow) {
       timing.push("Tomorrow");
     }
 
-    if (task.startDate && task.startDate > tomorrow) {
+    if (timingStartDate && timingStartDate > tomorrow) {
       timing.push("Future");
     }
 
-    if (!task.startDate && !task.dueDate) {
+    if (!timingStartDate && !task.dueDate) {
       timing.push("Needs Timing");
     }
 
@@ -414,12 +423,13 @@
     const today = relativeLocalIsoDate(0);
     const tomorrow = relativeLocalIsoDate(1);
     const terminalStatus = isTerminalProjectStatus(project.status) || Boolean(project.finishDate);
+    const timingStartDate = plannedStartDate(project.scheduledDate, project.startDate);
 
     if (
       !terminalStatus &&
-      project.startDate &&
+      timingStartDate &&
       project.dueDate &&
-      project.startDate <= today &&
+      timingStartDate <= today &&
       today <= project.dueDate
     ) {
       timing.push("Current");
@@ -433,15 +443,15 @@
       timing.push("Overdue");
     }
 
-    if (!terminalStatus && project.startDate === tomorrow) {
+    if (!terminalStatus && timingStartDate === tomorrow) {
       timing.push("Tomorrow");
     }
 
-    if (!terminalStatus && project.startDate && project.startDate > tomorrow) {
+    if (!terminalStatus && timingStartDate && timingStartDate > tomorrow) {
       timing.push("Future");
     }
 
-    if (!terminalStatus && !project.startDate && !project.dueDate) {
+    if (!terminalStatus && !timingStartDate && !project.dueDate) {
       timing.push("Needs Timing");
     }
 
@@ -792,8 +802,12 @@
         return compareText(left.projectName, right.projectName);
       case "requester":
         return compareText((left.projectRequester ?? []).join(", "), (right.projectRequester ?? []).join(", "));
+      case "scheduled":
+        return compareNullableDate(left.scheduledDate, right.scheduledDate);
       case "start":
         return compareNullableDate(left.startDate, right.startDate);
+      case "finish":
+        return compareNullableDate(left.finishedDate, right.finishedDate);
       case "timing":
         return compareText(timingSortValue(left), timingSortValue(right));
       case "due":
@@ -849,6 +863,23 @@
       key: "priority",
       value,
     });
+  }
+
+  function readDateInputValue(event: Event): string | null {
+    const value = (event.currentTarget as HTMLInputElement).value.trim();
+    return value.length > 0 ? value : null;
+  }
+
+  function handleProjectDateChange(project: ProjectNote, key: ProjectMetadataKey, event: Event): void {
+    void viewStore.updateProject({
+      path: project.path,
+      key,
+      value: readDateInputValue(event) ?? "",
+    });
+  }
+
+  function handleTaskDateChange(task: ProjectTask, field: TaskDateField, event: Event): void {
+    void viewStore.setTaskDate(task.id, field, readDateInputValue(event));
   }
 
   function badgeToken(value: string): string {
@@ -1403,7 +1434,7 @@
                 {:else if column.id === "status"}
                   <select
                     value={project.status}
-                    class={`opn-badge-select opn-status-badge ${statusBadgeClass(project.status)}`}
+                    class={`opn-grid-inline-editor opn-badge-select opn-status-badge ${statusBadgeClass(project.status)}`}
                     onchange={(event) => handleStatusChange(project, event)}
                   >
                     {#each statusOptions as status (status)}
@@ -1413,19 +1444,41 @@
                 {:else if column.id === "priority"}
                   <select
                     value={project.priority}
-                    class={`opn-badge-select opn-priority-badge ${priorityBadgeClass(project.priority)}`}
+                    class={`opn-grid-inline-editor opn-badge-select opn-priority-badge ${priorityBadgeClass(project.priority)}`}
                     onchange={(event) => handlePriorityChange(project, event)}
                   >
                     {#each state.priorities as priority (priority)}
                       <option value={priority}>{priority}</option>
                     {/each}
                   </select>
+                {:else if column.id === "scheduled-date"}
+                  <input
+                    type="date"
+                    class={`opn-grid-inline-editor opn-grid-date-input ${project.scheduledDate ? "" : "is-empty"}`}
+                    value={project.scheduledDate ?? ""}
+                    onchange={(event) => handleProjectDateChange(project, "scheduled-date", event)}
+                  />
                 {:else if column.id === "start-date"}
-                  {project.startDate ?? ""}
+                  <input
+                    type="date"
+                    class={`opn-grid-inline-editor opn-grid-date-input ${project.startDate ? "" : "is-empty"}`}
+                    value={project.startDate ?? ""}
+                    onchange={(event) => handleProjectDateChange(project, "start-date", event)}
+                  />
                 {:else if column.id === "finish-date"}
-                  {project.finishDate ?? ""}
+                  <input
+                    type="date"
+                    class={`opn-grid-inline-editor opn-grid-date-input ${project.finishDate ? "" : "is-empty"}`}
+                    value={project.finishDate ?? ""}
+                    onchange={(event) => handleProjectDateChange(project, "finish-date", event)}
+                  />
                 {:else if column.id === "due-date"}
-                  {project.dueDate ?? ""}
+                  <input
+                    type="date"
+                    class={`opn-grid-inline-editor opn-grid-date-input ${project.dueDate ? "" : "is-empty"}`}
+                    value={project.dueDate ?? ""}
+                    onchange={(event) => handleProjectDateChange(project, "due-date", event)}
+                  />
                 {:else if column.id === "timing-status"}
                   {@const timingStatuses = projectTimingStatuses(project)}
                   {#if timingStatuses.length > 0}
@@ -1581,7 +1634,7 @@
                 {:else if column.id === "status"}
                   <select
                     value={project.status}
-                    class={`opn-badge-select opn-status-badge ${statusBadgeClass(project.status)}`}
+                    class={`opn-grid-inline-editor opn-badge-select opn-status-badge ${statusBadgeClass(project.status)}`}
                     onchange={(event) => handleStatusChange(project, event)}
                   >
                     {#each statusOptions as status (status)}
@@ -1591,19 +1644,41 @@
                 {:else if column.id === "priority"}
                   <select
                     value={project.priority}
-                    class={`opn-badge-select opn-priority-badge ${priorityBadgeClass(project.priority)}`}
+                    class={`opn-grid-inline-editor opn-badge-select opn-priority-badge ${priorityBadgeClass(project.priority)}`}
                     onchange={(event) => handlePriorityChange(project, event)}
                   >
                     {#each state.priorities as priority (priority)}
                       <option value={priority}>{priority}</option>
                     {/each}
                   </select>
+                {:else if column.id === "scheduled-date"}
+                  <input
+                    type="date"
+                    class={`opn-grid-inline-editor opn-grid-date-input ${project.scheduledDate ? "" : "is-empty"}`}
+                    value={project.scheduledDate ?? ""}
+                    onchange={(event) => handleProjectDateChange(project, "scheduled-date", event)}
+                  />
                 {:else if column.id === "start-date"}
-                  {project.startDate ?? ""}
+                  <input
+                    type="date"
+                    class={`opn-grid-inline-editor opn-grid-date-input ${project.startDate ? "" : "is-empty"}`}
+                    value={project.startDate ?? ""}
+                    onchange={(event) => handleProjectDateChange(project, "start-date", event)}
+                  />
                 {:else if column.id === "finish-date"}
-                  {project.finishDate ?? ""}
+                  <input
+                    type="date"
+                    class={`opn-grid-inline-editor opn-grid-date-input ${project.finishDate ? "" : "is-empty"}`}
+                    value={project.finishDate ?? ""}
+                    onchange={(event) => handleProjectDateChange(project, "finish-date", event)}
+                  />
                 {:else if column.id === "due-date"}
-                  {project.dueDate ?? ""}
+                  <input
+                    type="date"
+                    class={`opn-grid-inline-editor opn-grid-date-input ${project.dueDate ? "" : "is-empty"}`}
+                    value={project.dueDate ?? ""}
+                    onchange={(event) => handleProjectDateChange(project, "due-date", event)}
+                  />
                 {:else if column.id === "timing-status"}
                   {@const timingStatuses = projectTimingStatuses(project)}
                   {#if timingStatuses.length > 0}
@@ -1729,7 +1804,7 @@
                             {:else if column.id === "status"}
                               <select
                                 value={child.status}
-                                class={`opn-badge-select opn-status-badge ${statusBadgeClass(child.status)}`}
+                                class={`opn-grid-inline-editor opn-badge-select opn-status-badge ${statusBadgeClass(child.status)}`}
                                 onchange={(event) => handleStatusChange(child, event)}
                               >
                                 {#each statusOptions as status (status)}
@@ -1739,19 +1814,41 @@
                             {:else if column.id === "priority"}
                               <select
                                 value={child.priority}
-                                class={`opn-badge-select opn-priority-badge ${priorityBadgeClass(child.priority)}`}
+                                class={`opn-grid-inline-editor opn-badge-select opn-priority-badge ${priorityBadgeClass(child.priority)}`}
                                 onchange={(event) => handlePriorityChange(child, event)}
                               >
                                 {#each state.priorities as priority (priority)}
                                   <option value={priority}>{priority}</option>
                                 {/each}
                               </select>
+                            {:else if column.id === "scheduled-date"}
+                              <input
+                                type="date"
+                                class={`opn-grid-inline-editor opn-grid-date-input ${child.scheduledDate ? "" : "is-empty"}`}
+                                value={child.scheduledDate ?? ""}
+                                onchange={(event) => handleProjectDateChange(child, "scheduled-date", event)}
+                              />
                             {:else if column.id === "start-date"}
-                              {child.startDate ?? ""}
+                              <input
+                                type="date"
+                                class={`opn-grid-inline-editor opn-grid-date-input ${child.startDate ? "" : "is-empty"}`}
+                                value={child.startDate ?? ""}
+                                onchange={(event) => handleProjectDateChange(child, "start-date", event)}
+                              />
                             {:else if column.id === "finish-date"}
-                              {child.finishDate ?? ""}
+                              <input
+                                type="date"
+                                class={`opn-grid-inline-editor opn-grid-date-input ${child.finishDate ? "" : "is-empty"}`}
+                                value={child.finishDate ?? ""}
+                                onchange={(event) => handleProjectDateChange(child, "finish-date", event)}
+                              />
                             {:else if column.id === "due-date"}
-                              {child.dueDate ?? ""}
+                              <input
+                                type="date"
+                                class={`opn-grid-inline-editor opn-grid-date-input ${child.dueDate ? "" : "is-empty"}`}
+                                value={child.dueDate ?? ""}
+                                onchange={(event) => handleProjectDateChange(child, "due-date", event)}
+                              />
                             {:else if column.id === "timing-status"}
                               {@const timingStatuses = projectTimingStatuses(child)}
                               {#if timingStatuses.length > 0}
@@ -1934,10 +2031,34 @@
                 {:else}
                   {""}
                 {/if}
+              {:else if column.id === "scheduled"}
+                <input
+                  type="date"
+                  class={`opn-grid-inline-editor opn-grid-date-input ${task.scheduledDate ? "" : "is-empty"}`}
+                  value={task.scheduledDate ?? ""}
+                  onchange={(event) => handleTaskDateChange(task, "scheduled", event)}
+                />
               {:else if column.id === "start"}
-                {task.startDate ?? ""}
+                <input
+                  type="date"
+                  class={`opn-grid-inline-editor opn-grid-date-input ${task.startDate ? "" : "is-empty"}`}
+                  value={task.startDate ?? ""}
+                  onchange={(event) => handleTaskDateChange(task, "start", event)}
+                />
               {:else if column.id === "due"}
-                {task.dueDate ?? ""}
+                <input
+                  type="date"
+                  class={`opn-grid-inline-editor opn-grid-date-input ${task.dueDate ? "" : "is-empty"}`}
+                  value={task.dueDate ?? ""}
+                  onchange={(event) => handleTaskDateChange(task, "due", event)}
+                />
+              {:else if column.id === "finish"}
+                <input
+                  type="date"
+                  class={`opn-grid-inline-editor opn-grid-date-input ${task.finishedDate ? "" : "is-empty"}`}
+                  value={task.finishedDate ?? ""}
+                  onchange={(event) => handleTaskDateChange(task, "finish", event)}
+                />
               {:else if column.id === "timing"}
                 {@const timingStatuses = taskTimingStatuses(task)}
                 {#if timingStatuses.length > 0}

@@ -22,6 +22,7 @@ export type KanbanCardBaseFieldId =
   | "name"
   | "priority"
   | "timing-status"
+  | "scheduled-date"
   | "start-date"
   | "due-date"
   | "finish-date"
@@ -34,6 +35,7 @@ export type ProjectGridBaseColumnId =
   | "status"
   | "priority"
   | "timing-status"
+  | "scheduled-date"
   | "start-date"
   | "finish-date"
   | "due-date"
@@ -68,6 +70,7 @@ export type ProjectSortField =
   | "status"
   | "priority"
   | "timing-status"
+  | "scheduled-date"
   | "start-date"
   | "finish-date"
   | "due-date"
@@ -118,6 +121,7 @@ export interface ProjectTask {
   text: string;
   state: TaskState;
   checked: boolean;
+  scheduledDate: string | null;
   startDate: string | null;
   dueDate: string | null;
   finishedDate: string | null;
@@ -134,6 +138,7 @@ export interface ProjectNote {
   status: string;
   statusIsUnknown: boolean;
   priority: string;
+  scheduledDate: string | null;
   startDate: string | null;
   finishDate: string | null;
   dueDate: string | null;
@@ -208,9 +213,17 @@ export interface PluginPersistedData {
   snapshot?: ProjectIndexSnapshot;
 }
 
+export type ProjectMetadataKey =
+  | "status"
+  | "priority"
+  | "scheduled-date"
+  | "start-date"
+  | "finish-date"
+  | "due-date";
+
 export interface ProjectMetadataUpdate {
   path: string;
-  key: "status" | "priority";
+  key: ProjectMetadataKey;
   value: string;
 }
 
@@ -219,9 +232,18 @@ export interface TaskToggleRequest {
   state: TaskState;
 }
 
+export type TaskDateField = "scheduled" | "start" | "due" | "finish";
+
+export interface TaskDateUpdateRequest {
+  taskId: string;
+  field: TaskDateField;
+  value: string | null;
+}
+
 export interface AddTaskRequest {
   projectPath: string;
   text: string;
-  startDate: string;
+  scheduledDate: string;
+  startDate: string | null;
   dueDate: string | null;
 }

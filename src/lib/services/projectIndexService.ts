@@ -4,10 +4,12 @@ import type {
   AddTaskRequest,
   AreaConfig,
   ProjectIndexSnapshot,
+  ProjectMetadataKey,
   ProjectMetadataUpdate,
   ProjectNote,
   ProjectQuerySpec,
   ProjectSettings,
+  TaskDateUpdateRequest,
   ProjectTask,
   TaskQuerySpec,
   TaskToggleRequest,
@@ -37,6 +39,7 @@ const RESERVED_PROJECT_PROPERTY_KEYS = new Set<string>([
   "aliases",
   "status",
   "priority",
+  "scheduled-date",
   "start-date",
   "finish-date",
   "due-date",
@@ -210,6 +213,7 @@ export class ProjectIndexService {
           project.aliases.join(" "),
           project.status,
           project.priority,
+          project.scheduledDate ?? "",
           project.startDate ?? "",
           project.finishDate ?? "",
           project.dueDate ?? "",
@@ -252,6 +256,7 @@ export class ProjectIndexService {
           task.text,
           task.projectName,
           (task.projectRequester ?? []).join(" "),
+          task.scheduledDate ?? "",
           task.startDate ?? "",
           task.dueDate ?? "",
           task.finishedDate ?? "",
@@ -325,12 +330,12 @@ export class ProjectIndexService {
     }
 
     await this.app.fileManager.processFrontMatter(abstractFile, (frontmatter) => {
-      if (update.key === "status" || update.key === "priority") {
+      if (this.isListMetadataKey(update.key)) {
         frontmatter[update.key] = [update.value];
         return;
       }
 
-      frontmatter[update.key] = update.value;
+      frontmatter[update.key] = update.value.trim().length > 0 ? update.value : null;
     });
 
     const changed = await this.handleFileChange(abstractFile, { normalize: false, syncTaskCompletionMarkers: false });
@@ -340,6 +345,31 @@ export class ProjectIndexService {
     }
 
     return changed;
+  }
+
+  async updateTaskDate(request: TaskDateUpdateRequest): Promise<boolean> {
+    const task = this.tasksById.get(request.taskId);
+    if (!task) {
+      return false;
+    }
+
+    const abstractFile = this.app.vault.getAbstractFileByPath(task.projectPath);
+    if (!(abstractFile instanceof TFile)) {
+      return false;
+    }
+
+    const changed = await this.taskParser.updateTaskDate(abstractFile, task, request.field, request.value);
+    if (!changed) {
+      return false;
+    }
+
+    const refreshed = await this.handleFileChange(abstractFile, { normalize: false, syncTaskCompletionMarkers: false });
+    if (refreshed) {
+      this.rebuildTaskIndex();
+      this.notifyAndPersist();
+    }
+
+    return refreshed;
   }
 
   async toggleTask(request: TaskToggleRequest): Promise<boolean> {
@@ -484,6 +514,7 @@ export class ProjectIndexService {
     const notesSectionText = this.extractNotesSectionText(content);
 
     const startDate = normalizeStringValue(frontmatter["start-date"]);
+    const scheduledDate = normalizeStringValue(frontmatter["scheduled-date"]);
     const finishDate = normalizeStringValue(frontmatter["finish-date"]);
     const dueDate = normalizeStringValue(frontmatter["due-date"]);
 
@@ -499,6 +530,7 @@ export class ProjectIndexService {
       status: statusIsUnknown ? UNKNOWN_STATUS : rawStatus,
       statusIsUnknown,
       priority,
+      scheduledDate: isIsoDate(scheduledDate) ? scheduledDate : null,
       startDate: isIsoDate(startDate) ? startDate : null,
       finishDate: isIsoDate(finishDate) ? finishDate : null,
       dueDate: isIsoDate(dueDate) ? dueDate : null,
@@ -602,6 +634,8 @@ export class ProjectIndexService {
         return project.priority;
       case "timing-status":
         return this.projectTimingSortValue(project);
+      case "scheduled-date":
+        return project.scheduledDate;
       case "start-date":
         return project.startDate;
       case "finish-date":
@@ -653,12 +687,13 @@ export class ProjectIndexService {
     const today = this.relativeLocalIsoDate(0);
     const tomorrow = this.relativeLocalIsoDate(1);
     const terminalStatus = this.isTerminalProjectStatus(project.status) || Boolean(project.finishDate);
+    const plannedStartDate = project.scheduledDate ?? project.startDate;
 
     if (
       !terminalStatus &&
-      project.startDate &&
+      plannedStartDate &&
       project.dueDate &&
-      project.startDate <= today &&
+      plannedStartDate <= today &&
       today <= project.dueDate
     ) {
       timing.push("Current");
@@ -672,15 +707,15 @@ export class ProjectIndexService {
       timing.push("Overdue");
     }
 
-    if (!terminalStatus && project.startDate === tomorrow) {
+    if (!terminalStatus && plannedStartDate === tomorrow) {
       timing.push("Tomorrow");
     }
 
-    if (!terminalStatus && project.startDate && project.startDate > tomorrow) {
+    if (!terminalStatus && plannedStartDate && plannedStartDate > tomorrow) {
       timing.push("Future");
     }
 
-    if (!terminalStatus && !project.startDate && !project.dueDate) {
+    if (!terminalStatus && !plannedStartDate && !project.dueDate) {
       timing.push("Needs Timing");
     }
 
@@ -751,5 +786,9 @@ export class ProjectIndexService {
     for (const listener of this.listeners) {
       listener();
     }
+  }
+
+  private isListMetadataKey(key: ProjectMetadataKey): boolean {
+    return key === "status" || key === "priority";
   }
 }

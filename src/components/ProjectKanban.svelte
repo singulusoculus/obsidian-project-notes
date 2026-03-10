@@ -16,7 +16,7 @@
 
   type LinkMatchType = "wiki" | "markdown-external" | "external-url";
 
-  const TASK_DATE_TOKEN_REGEX = /(?:🛫|📅|✅)\s*\d{4}-\d{2}-\d{2}/gu;
+  const TASK_DATE_TOKEN_REGEX = /(?:⏳|🛫|📅|✅)\s*\d{4}-\d{2}-\d{2}/gu;
   const WIKI_LINK_REGEX = /\[\[([^\]]+)\]\]/gu;
   const MARKDOWN_EXTERNAL_LINK_REGEX = /\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^)]+)\)/giu;
   const EXTERNAL_URL_REGEX = /\b(?:https?:\/\/|mailto:)[^\s<>()]+/giu;
@@ -469,17 +469,22 @@
     return normalized === "done" || normalized === "cancelled" || normalized === "canceled";
   }
 
+  function plannedStartDate(scheduledDate: string | null, startDate: string | null): string | null {
+    return scheduledDate ?? startDate;
+  }
+
   function projectTimingStatuses(project: ProjectNote): string[] {
     const timing: string[] = [];
     const today = relativeLocalIsoDate(0);
     const tomorrow = relativeLocalIsoDate(1);
     const terminalStatus = isTerminalProjectStatus(project.status) || Boolean(project.finishDate);
+    const timingStartDate = plannedStartDate(project.scheduledDate, project.startDate);
 
     if (
       !terminalStatus &&
-      project.startDate &&
+      timingStartDate &&
       project.dueDate &&
-      project.startDate <= today &&
+      timingStartDate <= today &&
       today <= project.dueDate
     ) {
       timing.push("Current");
@@ -493,15 +498,15 @@
       timing.push("Overdue");
     }
 
-    if (!terminalStatus && project.startDate === tomorrow) {
+    if (!terminalStatus && timingStartDate === tomorrow) {
       timing.push("Tomorrow");
     }
 
-    if (!terminalStatus && project.startDate && project.startDate > tomorrow) {
+    if (!terminalStatus && timingStartDate && timingStartDate > tomorrow) {
       timing.push("Future");
     }
 
-    if (!terminalStatus && !project.startDate && !project.dueDate) {
+    if (!terminalStatus && !timingStartDate && !project.dueDate) {
       timing.push("Needs Timing");
     }
 
@@ -797,6 +802,13 @@
                     </a>
                   {:else if field.id === "priority" || field.id === "timing-status"}
                     {""}
+                  {:else if field.id === "scheduled-date"}
+                    {#if project.scheduledDate}
+                      <div class="opn-kanban-field-row">
+                        <span class="opn-kanban-field-label">Scheduled</span>
+                        <span class="opn-kanban-field-value">{project.scheduledDate}</span>
+                      </div>
+                    {/if}
                   {:else if field.id === "start-date"}
                     {#if project.startDate}
                       <div class="opn-kanban-field-row">
