@@ -523,6 +523,10 @@ input[type="date"].is-empty:not(:hover):not(:focus):not(:active)::-webkit-dateti
   background: color-mix(in srgb, var(--color-orange) 20%, var(--background-secondary-alt));
 }
 
+.opn-task-timing-off-schedule {
+  background: color-mix(in srgb, var(--color-pink) 18%, var(--background-secondary-alt));
+}
+
 .opn-task-timing-overdue {
   background: color-mix(in srgb, var(--color-red) 22%, var(--background-secondary-alt));
 }

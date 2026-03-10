@@ -27,13 +27,14 @@
   type TaskSortField = "state" | "task" | "project" | "requester" | "scheduled" | "start" | "due" | "finish" | "timing";
   type ProjectsViewMode = "project-task" | "parent-child";
   type TaskStatusFilterOption = "To Do" | "Doing" | "Done";
-  type TaskTimingFilterOption = "Current" | "Due" | "Overdue" | "Tomorrow" | "Future" | "Needs Timing";
+  type TaskTimingFilterOption = "Current" | "Off Schedule" | "Due" | "Overdue" | "Tomorrow" | "Future" | "Needs Timing";
   type ProjectTimingFilterOption = TaskTimingFilterOption;
 
   const TRI_STATE_TASK_STATUS_OPTIONS: TaskStatusFilterOption[] = ["To Do", "Doing", "Done"];
   const BINARY_TASK_STATUS_OPTIONS: TaskStatusFilterOption[] = ["To Do", "Done"];
   const TASK_TIMING_OPTIONS: TaskTimingFilterOption[] = [
     "Current",
+    "Off Schedule",
     "Due",
     "Overdue",
     "Tomorrow",
@@ -42,6 +43,7 @@
   ];
   const DEFAULT_TASK_TIMING_FILTER: TaskTimingFilterOption[] = [
     "Current",
+    "Off Schedule",
     "Due",
     "Overdue",
     "Tomorrow",
@@ -421,6 +423,10 @@
       timing.push("Current");
     }
 
+    if (task.scheduledDate && !task.startDate && today > task.scheduledDate) {
+      timing.push("Off Schedule");
+    }
+
     if (task.dueDate === today) {
       timing.push("Due");
     }
@@ -459,6 +465,10 @@
       today <= project.dueDate
     ) {
       timing.push("Current");
+    }
+
+    if (!terminalStatus && project.scheduledDate && !project.startDate && today > project.scheduledDate) {
+      timing.push("Off Schedule");
     }
 
     if (!terminalStatus && project.dueDate === today) {

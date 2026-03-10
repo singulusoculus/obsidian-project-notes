@@ -27,9 +27,10 @@
     onRendered?: (host: HTMLElement) => void;
   }
 
-  type ProjectTimingFilterOption = "Current" | "Due" | "Overdue" | "Tomorrow" | "Future" | "Needs Timing";
+  type ProjectTimingFilterOption = "Current" | "Off Schedule" | "Due" | "Overdue" | "Tomorrow" | "Future" | "Needs Timing";
   const PROJECT_TIMING_OPTIONS: ProjectTimingFilterOption[] = [
     "Current",
+    "Off Schedule",
     "Due",
     "Overdue",
     "Tomorrow",
@@ -595,6 +596,10 @@
       today <= project.dueDate
     ) {
       timing.push("Current");
+    }
+
+    if (!terminalStatus && project.scheduledDate && !project.startDate && today > project.scheduledDate) {
+      timing.push("Off Schedule");
     }
 
     if (!terminalStatus && project.dueDate === today) {

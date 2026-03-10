@@ -13,8 +13,12 @@
 ## Untagged Version
 ### Uncommitted Work
 #### 2026.03.10
-- Simplified ongoing support by adding `Ongoing` as a default project status (including the default project-status filter) and adding project Timing multiselect filters to both the Projects and Kanban views.
+- Added `Off Schedule` as a timing status for projects and tasks when today is past their scheduled date, including badge rendering, task/project timing filters, and project timing-sort support across Projects, Tasks, and Kanban.
+- Refined `Off Schedule` so it only applies when the item is past its scheduled date and still has no start date.
 
+### 94c3b32 Ongoing projects
+#### 2026.03.10
+- Simplified ongoing support by adding `Ongoing` as a default project status (including the default project-status filter) and adding project Timing multiselect filters to both the Projects and Kanban views.
 
 ### 20fa1f5 Stop tracking data.json
 #### 2026.03.10

@@ -706,6 +706,10 @@ export class ProjectIndexService {
       timing.push("Current");
     }
 
+    if (!terminalStatus && project.scheduledDate && !project.startDate && today > project.scheduledDate) {
+      timing.push("Off Schedule");
+    }
+
     if (!terminalStatus && project.dueDate === today) {
       timing.push("Due");
     }
