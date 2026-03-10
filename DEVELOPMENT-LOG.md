@@ -14,6 +14,8 @@
 ### Uncommitted Work
 #### 2026.03.10
 - Refined grid date input styling so empty date fields hide the native `mm/dd/yyyy` hint text and calendar picker icon until hover or focus, keeping blank cells visually clean while preserving inline editing.
+- Updated task Finish-date editing in the Tasks grid so setting a finish date now also marks the task checkbox complete, while checkbox completion from notes or views continues to add the finish date automatically.
+- Added project status/date synchronization so setting a project `finish-date` marks it `Done`, setting `start-date` marks it `Doing`, and changing status to `Done` or `Doing` backfills today’s missing finish/start date respectively.
 
 #### 2026.03.09
 - Added first-class `Scheduled` date support for projects and tasks.

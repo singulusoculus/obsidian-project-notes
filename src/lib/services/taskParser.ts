@@ -439,7 +439,10 @@ export class TaskParser {
     }
 
     const nextText = parts.filter((part) => part.length > 0).join(" ").trim();
-    const marker = field === "finish" && value === null ? " " : currentMarker;
+    let marker = currentMarker;
+    if (field === "finish") {
+      marker = value ? "x" : " ";
+    }
 
     return {
       marker,

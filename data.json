@@ -114,7 +114,7 @@
     "kanbanNotesPreviewWords": 100,
     "kanbanNotesPreviewLines": 5,
     "enableTriStateCheckboxes": true,
-    "startupView": "kanban",
+    "startupView": "projects",
     "openTarget": "right-sidebar",
     "defaultProjectStatuses": [
       "To Do",
@@ -131,7 +131,7 @@
   },
   "snapshot": {
     "version": 6,
-    "generatedAt": 1773154722047,
+    "generatedAt": 1773155906283,
     "projects": [
       {
         "path": "Test Area/Another Project.md",
@@ -256,7 +256,7 @@
         },
         "notesSectionText": "",
         "createdAt": 1772748698440,
-        "updatedAt": 1773154721242,
+        "updatedAt": 1773155905459,
         "tasks": [
           {
             "id": "Test Area/DAte test.md:16",
@@ -264,14 +264,14 @@
             "projectName": "DAte test",
             "projectRequester": [],
             "line": 16,
-            "text": "This is a test ⏳ 2026-03-10 🛫 2026-03-10 📅 2026-03-11",
-            "state": "unchecked",
-            "checked": false,
+            "text": "This is a test ⏳ 2026-03-10 📅 2026-03-11 🛫 2026-03-10 ✅ 2026-03-10",
+            "state": "checked",
+            "checked": true,
             "scheduledDate": "2026-03-10",
             "startDate": "2026-03-10",
             "dueDate": "2026-03-11",
-            "finishedDate": null,
-            "rawLine": "- [ ] This is a test ⏳ 2026-03-10 🛫 2026-03-10 📅 2026-03-11"
+            "finishedDate": "2026-03-10",
+            "rawLine": "- [x] This is a test ⏳ 2026-03-10 📅 2026-03-11 🛫 2026-03-10 ✅ 2026-03-10"
           },
           {
             "id": "Test Area/DAte test.md:17",
@@ -522,7 +522,7 @@
         "displayName": "Test 9",
         "areaId": "area-1772741878315-uiunz0",
         "areaName": "Test",
-        "status": "To Do",
+        "status": "Doing",
         "statusIsUnknown": false,
         "priority": "🔵 Low",
         "scheduledDate": null,
@@ -537,7 +537,7 @@
         },
         "notesSectionText": "",
         "createdAt": 1773000187070,
-        "updatedAt": 1773091975288,
+        "updatedAt": 1773155796623,
         "tasks": []
       },
       {

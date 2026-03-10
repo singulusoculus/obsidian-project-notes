@@ -22,6 +22,7 @@ import {
   normalizeArrayValue,
   normalizeListOrStringValue,
   normalizeStringValue,
+  todayIsoDate,
 } from "../utils/text";
 import { canonicalPropertyName, resolveAreaPropertyTemplates } from "../utils/properties";
 import { parseH2Sections, splitFrontmatter } from "../utils/markdown";
@@ -329,13 +330,19 @@ export class ProjectIndexService {
       return false;
     }
 
-    await this.app.fileManager.processFrontMatter(abstractFile, (frontmatter) => {
-      if (this.isListMetadataKey(update.key)) {
-        frontmatter[update.key] = [update.value];
-        return;
-      }
+    const area = this.resolveArea(abstractFile.path);
+    const normalizedValue = update.value.trim();
 
-      frontmatter[update.key] = update.value.trim().length > 0 ? update.value : null;
+    await this.app.fileManager.processFrontMatter(abstractFile, (frontmatter) => {
+      const updates = this.buildProjectMetadataUpdates(frontmatter, update.key, normalizedValue, area?.id ?? null);
+      for (const [key, value] of Object.entries(updates)) {
+        if (this.isListMetadataKey(key as ProjectMetadataKey)) {
+          frontmatter[key] = value;
+          continue;
+        }
+
+        frontmatter[key] = value;
+      }
     });
 
     const changed = await this.handleFileChange(abstractFile, { normalize: false, syncTaskCompletionMarkers: false });
@@ -790,5 +797,55 @@ export class ProjectIndexService {
 
   private isListMetadataKey(key: ProjectMetadataKey): boolean {
     return key === "status" || key === "priority";
+  }
+
+  private buildProjectMetadataUpdates(
+    frontmatter: Record<string, unknown>,
+    key: ProjectMetadataKey,
+    value: string,
+    areaId: string | null,
+  ): Record<string, string | string[] | null> {
+    const updates: Record<string, string | string[] | null> = {};
+    const listValue = value.length > 0 ? [value] : null;
+    updates[key] = this.isListMetadataKey(key) ? listValue : value.length > 0 ? value : null;
+
+    const currentStatus = normalizeListOrStringValue(frontmatter.status);
+    const currentStartDate = normalizeStringValue(frontmatter["start-date"]);
+    const currentFinishDate = normalizeStringValue(frontmatter["finish-date"]);
+    const doingStatus = this.resolveProjectStatusValue(areaId, "doing");
+    const doneStatus = this.resolveProjectStatusValue(areaId, "done");
+
+    if (key === "status") {
+      const normalizedStatus = value.toLowerCase();
+      if (normalizedStatus === "doing" && !currentStartDate) {
+        updates["start-date"] = todayIsoDate();
+      }
+
+      if (normalizedStatus === "done" && !currentFinishDate) {
+        updates["finish-date"] = todayIsoDate();
+      }
+
+      return updates;
+    }
+
+    if (key === "start-date" && value.length > 0 && currentStatus?.toLowerCase() !== "doing") {
+      updates.status = [doingStatus];
+      return updates;
+    }
+
+    if (key === "finish-date" && value.length > 0 && currentStatus?.toLowerCase() !== "done") {
+      updates.status = [doneStatus];
+    }
+
+    return updates;
+  }
+
+  private resolveProjectStatusValue(areaId: string | null, target: "doing" | "done"): string {
+    const match = this.getStatusesForArea(areaId).find((status) => status.trim().toLowerCase() === target);
+    if (match) {
+      return match;
+    }
+
+    return target === "doing" ? "Doing" : "Done";
   }
 }
