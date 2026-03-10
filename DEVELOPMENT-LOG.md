@@ -10,8 +10,11 @@
 - Do not log changes made solely to `DEVELOPMENT-LOG.md` itself.
 - Keep newest items first.
 
-## Untagged Version
-### Uncommitted Work
+## v0.0.5
+### 477d2b0 bump version to v0.0.5
+#### 2026.03.10
+
+### 2874a13 Added `Off Schedule` as a timing status
 #### 2026.03.10
 - Added `Off Schedule` as a timing status for projects and tasks when today is past their scheduled date, including badge rendering, task/project timing filters, and project timing-sort support across Projects, Tasks, and Kanban.
 - Refined `Off Schedule` so it only applies when the item is past its scheduled date and still has no start date.

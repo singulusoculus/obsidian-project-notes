@@ -1,5 +1,21 @@
 # Release Notes
 
+## v0.0.5
+
+### Features
+- Added `Scheduled` date support for both projects and tasks.
+  - projects now support the locked `scheduled-date` property
+  - tasks now support the `⏳ YYYY-MM-DD` scheduled marker
+- Added inline date editing in the grid views for project and task date fields using native date pickers.
+- Added automatic project/task workflow syncing for date and status changes.
+  - setting a task finish date marks the task complete
+  - setting a project start date moves it to `Doing`
+  - setting a project finish date moves it to `Done`
+  - changing project status to `Doing` or `Done` backfills the matching start/finish date when missing
+- Added `Ongoing` as a default project status and included it in the default project-status filter.
+- Added project `Timing` multiselect filters to both the Projects view and the Kanban view.
+- Added `Off Schedule` as a timing status for projects and tasks when an item is past its scheduled date and has not been started.
+
 ## v0.0.4
 
 ### Features

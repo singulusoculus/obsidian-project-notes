@@ -8,6 +8,7 @@
 - Reference Svelte documentation here: https://svelte.dev/docs/svelte/overview
 - How to use Svelte in Obsidian: https://docs.obsidian.md/Plugins/Getting+started/Use+Svelte+in+your+plugin
 
+## Development Log
 - Log a summary of work completed in DEVELOPMENT-LOG.md under the current days section. If that section does not exist, create it
 - At the start of every turn, before doing any other work, check git state:
   - current HEAD commit sha and subject
@@ -30,6 +31,9 @@
 - Append new bullets under the correct current day header.
 - Do not log changes made solely to `DEVELOPMENT-LOG.md` itself. If a turn only updates `DEVELOPMENT-LOG.md`, do not add a work bullet for that turn.
 - Assume release tags are applied to HEAD. If a version tag is added to an older commit later, stop and ask how the log should be reorganized.
+
+## Release Notes
+- If during the update to DEVELOPMENT-LOG.md, you detected a new version, write that new version as `## vX.Y.Z` (with XYZ being the actual version number) to the top of RELEASE-NOTES.md with a section under it for `### Features` and `### Fixes`
 
 
 ## TypeScript
