@@ -287,6 +287,14 @@ export function parseSettings(data: Partial<ProjectSettings> | undefined): Proje
     merged.cacheReconcileMinutes = DEFAULT_SETTINGS.cacheReconcileMinutes;
   }
 
+  if (!merged.statuses.some((status) => status.trim().toLowerCase() === "ongoing")) {
+    merged.statuses = [...merged.statuses, "Ongoing"];
+  }
+
+  if (!merged.defaultProjectStatuses.some((status) => status.trim().toLowerCase() === "ongoing")) {
+    merged.defaultProjectStatuses = [...merged.defaultProjectStatuses, "Ongoing"];
+  }
+
   return merged;
 }
 

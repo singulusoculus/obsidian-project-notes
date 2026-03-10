@@ -9,10 +9,11 @@
 - How to use Svelte in Obsidian: https://docs.obsidian.md/Plugins/Getting+started/Use+Svelte+in+your+plugin
 
 - Log a summary of work completed in DEVELOPMENT-LOG.md under the current days section. If that section does not exist, create it
-- Before updating DEVELOPMENT-LOG.md on any turn, check git state:
+- At the start of every turn, before doing any other work, check git state:
   - current HEAD commit sha and subject
   - version tags on HEAD that match `v*`
   - whether there is uncommitted work in the working tree
+- Before doing any other work, normalize DEVELOPMENT-LOG.md to match the current git state whenever HEAD, tags on HEAD, or uncommitted-work state have changed since the top of the log was last aligned.
 - Organize DEVELOPMENT-LOG.md in reverse chronological order with this hierarchy:
   - `## Untagged Version` for the current untagged history above tagged versions
   - `## vX.Y.Z` only when a version tag is detected on HEAD and that version header does not already exist
@@ -23,6 +24,7 @@
 - Keep `### Uncommitted Work` at the top of `## Untagged Version` until a new commit is made.
 - If a new version tag is applied to HEAD, move that current top commit history under the new `## vX.Y.Z` header and remove or move `## Untagged Version` as needed.
 - If a new commit is created, place it under `## Untagged Version` and reset `### Uncommitted Work` above it as needed.
+- If the working tree becomes clean, remove any stale top-level `### Uncommitted Work` section before proceeding.
 - Keep newest items first.
 - Do not duplicate existing version, commit, or day headers.
 - Append new bullets under the correct current day header.

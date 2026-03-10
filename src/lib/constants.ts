@@ -9,6 +9,7 @@ import type {
 export const DEFAULT_STATUSES = [
   "To Do",
   "Doing",
+  "Ongoing",
   "Done",
   "Cancelled",
   "Awaiting Response",
@@ -100,7 +101,7 @@ export const DEFAULT_SETTINGS: ProjectSettings = {
   enableTriStateCheckboxes: true,
   startupView: "none",
   openTarget: "new-tab",
-  defaultProjectStatuses: ["Doing", "Awaiting Response"],
+  defaultProjectStatuses: ["Doing", "Awaiting Response", "Ongoing"],
   defaultSortBy: "due-date",
   defaultSortDirection: "asc",
   kanbanHiddenStatuses: ["Done", "Cancelled"],

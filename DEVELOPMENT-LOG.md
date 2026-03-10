@@ -13,9 +13,21 @@
 ## Untagged Version
 ### Uncommitted Work
 #### 2026.03.10
-- Refined grid date input styling so empty date fields hide the native `mm/dd/yyyy` hint text and calendar picker icon until hover or focus, keeping blank cells visually clean while preserving inline editing.
+- Simplified ongoing support by adding `Ongoing` as a default project status (including the default project-status filter) and adding project Timing multiselect filters to both the Projects and Kanban views.
+
+
+### 20fa1f5 Stop tracking data.json
+#### 2026.03.10
+- Stopped tracking `data.json` in git so local plugin state changes no longer show up as tracked file modifications.
+
+### e6f9e4c tie start and finish dates to task checkbox status and project status
+#### 2026.03.10
 - Updated task Finish-date editing in the Tasks grid so setting a finish date now also marks the task checkbox complete, while checkbox completion from notes or views continues to add the finish date automatically.
 - Added project status/date synchronization so setting a project `finish-date` marks it `Done`, setting `start-date` marks it `Doing`, and changing status to `Done` or `Doing` backfills today’s missing finish/start date respectively.
+
+### aa2f359 Scheduled date, date fields editable, editable field styling
+#### 2026.03.10
+- Refined grid date input styling so empty date fields hide the native `mm/dd/yyyy` hint text and calendar picker icon until hover or focus, keeping blank cells visually clean while preserving inline editing.
 
 #### 2026.03.09
 - Added first-class `Scheduled` date support for projects and tasks.

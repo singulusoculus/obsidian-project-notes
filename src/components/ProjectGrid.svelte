@@ -28,6 +28,7 @@
   type ProjectsViewMode = "project-task" | "parent-child";
   type TaskStatusFilterOption = "To Do" | "Doing" | "Done";
   type TaskTimingFilterOption = "Current" | "Due" | "Overdue" | "Tomorrow" | "Future" | "Needs Timing";
+  type ProjectTimingFilterOption = TaskTimingFilterOption;
 
   const TRI_STATE_TASK_STATUS_OPTIONS: TaskStatusFilterOption[] = ["To Do", "Doing", "Done"];
   const BINARY_TASK_STATUS_OPTIONS: TaskStatusFilterOption[] = ["To Do", "Done"];
@@ -46,6 +47,7 @@
     "Tomorrow",
     "Needs Timing",
   ];
+  const PROJECT_TIMING_OPTIONS: ProjectTimingFilterOption[] = [...TASK_TIMING_OPTIONS];
 
   const TASK_GRID_COLUMNS: TaskGridColumnConfig[] = [
     { id: "done", label: "Done", sortField: "state", hideable: true },
@@ -79,6 +81,7 @@
   let expandedParentProjects = $state<Record<string, boolean>>({});
   let showStatusPicker = $state(false);
   let showPriorityPicker = $state(false);
+  let showProjectTimingPicker = $state(false);
   let showTaskStatusPicker = $state(false);
   let showTaskTimingPicker = $state(false);
   let projectsViewMode = $state<ProjectsViewMode>("project-task");
@@ -89,8 +92,10 @@
   let taskSortDirection = $state<SortDirection>("asc");
   let statusPickerWrap = $state<HTMLDivElement | null>(null);
   let priorityPickerWrap = $state<HTMLDivElement | null>(null);
+  let projectTimingPickerWrap = $state<HTMLDivElement | null>(null);
   let taskStatusPickerWrap = $state<HTMLDivElement | null>(null);
   let taskTimingPickerWrap = $state<HTMLDivElement | null>(null);
+  let projectTimingFilter = $state<ProjectTimingFilterOption[]>([...PROJECT_TIMING_OPTIONS]);
   let taskStatusFilter = $state<TaskStatusFilterOption[]>([]);
   let taskTimingFilter = $state<TaskTimingFilterOption[]>([...DEFAULT_TASK_TIMING_FILTER]);
   let taskStatusFilterInitialized = $state(false);
@@ -110,13 +115,32 @@
   const selectedTaskStatusSet = $derived.by(
     () => new Set(taskStatusFilter.filter((status) => taskStatusOptions.includes(status)))
   );
+  const selectedProjectTimingSet = $derived.by(
+    () => new Set(projectTimingFilter.filter((status) => PROJECT_TIMING_OPTIONS.includes(status)))
+  );
   const selectedTaskTimingSet = $derived.by(
     () => new Set(taskTimingFilter.filter((status) => TASK_TIMING_OPTIONS.includes(status)))
   );
 
+  const filteredProjects = $derived.by(() => {
+    if (allProjectTimingSelected()) {
+      return state.projects;
+    }
+
+    const selected = selectedProjectTimings();
+    if (selected.size === 0) {
+      return [];
+    }
+
+    return state.projects.filter((project) => {
+      const timing = projectTimingStatuses(project);
+      return timing.some((status) => selected.has(status));
+    });
+  });
+
   const sortedTasksByProject = $derived.by(() => {
     const result = new Map<string, ProjectTask[]>();
-    for (const project of state.projects) {
+    for (const project of filteredProjects) {
       const tasks = [...project.tasks].sort((left, right) => {
         if (left.checked !== right.checked) {
           return left.checked ? 1 : -1;
@@ -170,8 +194,8 @@
 
   const parentPathByProject = $derived.by(() => {
     const result = new Map<string, string | null>();
-    const resolver = createParentResolver(state.projects);
-    for (const project of state.projects) {
+    const resolver = createParentResolver(filteredProjects);
+    for (const project of filteredProjects) {
       result.set(project.path, resolver(project));
     }
     return result;
@@ -179,7 +203,7 @@
 
   const childrenByParent = $derived.by(() => {
     const result = new Map<string, ProjectNote[]>();
-    for (const project of state.projects) {
+    for (const project of filteredProjects) {
       const parentPath = parentPathByProject.get(project.path) ?? null;
       if (!parentPath || parentPath === project.path) {
         continue;
@@ -194,9 +218,9 @@
   });
 
   const rootProjects = $derived.by(() =>
-    state.projects.filter((project) => {
+    filteredProjects.filter((project) => {
       const parentPath = parentPathByProject.get(project.path) ?? null;
-      return !parentPath || !state.projects.some((candidate) => candidate.path === parentPath);
+      return !parentPath || !filteredProjects.some((candidate) => candidate.path === parentPath);
     })
   );
 
@@ -250,7 +274,7 @@
   });
 
   $effect(() => {
-    if (!showStatusPicker && !showPriorityPicker && !showTaskStatusPicker && !showTaskTimingPicker) {
+    if (!showStatusPicker && !showPriorityPicker && !showProjectTimingPicker && !showTaskStatusPicker && !showTaskTimingPicker) {
       return;
     }
 
@@ -259,6 +283,7 @@
       if (
         isInside(target, statusPickerWrap) ||
         isInside(target, priorityPickerWrap) ||
+        isInside(target, projectTimingPickerWrap) ||
         isInside(target, taskStatusPickerWrap) ||
         isInside(target, taskTimingPickerWrap)
       ) {
@@ -318,6 +343,7 @@
   function closeFilterPickers(): void {
     showStatusPicker = false;
     showPriorityPicker = false;
+    showProjectTimingPicker = false;
     showTaskStatusPicker = false;
     showTaskTimingPicker = false;
   }
@@ -564,6 +590,17 @@
     showPriorityPicker = !showPriorityPicker;
     if (showPriorityPicker) {
       showStatusPicker = false;
+      showProjectTimingPicker = false;
+      showTaskStatusPicker = false;
+      showTaskTimingPicker = false;
+    }
+  }
+
+  function toggleProjectTimingPicker(): void {
+    showProjectTimingPicker = !showProjectTimingPicker;
+    if (showProjectTimingPicker) {
+      showStatusPicker = false;
+      showPriorityPicker = false;
       showTaskStatusPicker = false;
       showTaskTimingPicker = false;
     }
@@ -574,6 +611,7 @@
     if (showTaskStatusPicker) {
       showStatusPicker = false;
       showPriorityPicker = false;
+      showProjectTimingPicker = false;
       showTaskTimingPicker = false;
     }
   }
@@ -583,6 +621,7 @@
     if (showTaskTimingPicker) {
       showStatusPicker = false;
       showPriorityPicker = false;
+      showProjectTimingPicker = false;
       showTaskStatusPicker = false;
     }
   }
@@ -625,6 +664,10 @@
     return selectedTaskStatuses().size === taskStatusOptions.length && taskStatusOptions.length > 0;
   }
 
+  function allProjectTimingSelected(): boolean {
+    return selectedProjectTimings().size === PROJECT_TIMING_OPTIONS.length && PROJECT_TIMING_OPTIONS.length > 0;
+  }
+
   function taskStatusButtonLabel(): string {
     const selectedCount = selectedTaskStatuses().size;
     if (selectedCount === 0) {
@@ -636,6 +679,19 @@
     }
 
     return `Task Status: ${selectedCount}`;
+  }
+
+  function projectTimingButtonLabel(): string {
+    const selectedCount = selectedProjectTimings().size;
+    if (selectedCount === 0) {
+      return "Timing: None";
+    }
+
+    if (allProjectTimingSelected()) {
+      return "Timing: All";
+    }
+
+    return `Timing: ${selectedCount}`;
   }
 
   function allTaskTimingSelected(): boolean {
@@ -667,6 +723,10 @@
     return selectedTaskStatusSet;
   }
 
+  function selectedProjectTimings(): Set<ProjectTimingFilterOption> {
+    return selectedProjectTimingSet;
+  }
+
   function selectedTaskTimings(): Set<TaskTimingFilterOption> {
     return selectedTaskTimingSet;
   }
@@ -693,6 +753,14 @@
 
   function handleTaskStatusSelectNone(): void {
     taskStatusFilter = [];
+  }
+
+  function handleProjectTimingSelectAll(): void {
+    projectTimingFilter = [...PROJECT_TIMING_OPTIONS];
+  }
+
+  function handleProjectTimingSelectNone(): void {
+    projectTimingFilter = [];
   }
 
   function handleTaskTimingSelectAll(): void {
@@ -736,6 +804,19 @@
 
     const normalized = taskStatusOptions.filter((status) => next.has(status));
     taskStatusFilter = normalized;
+  }
+
+  function handleProjectTimingOptionChange(projectTiming: ProjectTimingFilterOption, event: Event): void {
+    const checked = (event.currentTarget as HTMLInputElement).checked;
+    const next = new Set(selectedProjectTimings());
+    if (checked) {
+      next.add(projectTiming);
+    } else {
+      next.delete(projectTiming);
+    }
+
+    const normalized = PROJECT_TIMING_OPTIONS.filter((status) => next.has(status));
+    projectTimingFilter = normalized;
   }
 
   function handleTaskTimingOptionChange(taskTiming: TaskTimingFilterOption, event: Event): void {
@@ -1251,6 +1332,41 @@
             {/if}
           </div>
 
+          <div class="opn-multiselect-wrap" bind:this={projectTimingPickerWrap}>
+            <button
+              type="button"
+              class="secondary"
+              aria-haspopup="dialog"
+              aria-expanded={showProjectTimingPicker}
+              onclick={toggleProjectTimingPicker}
+            >
+              {projectTimingButtonLabel()}
+            </button>
+
+            {#if showProjectTimingPicker}
+              <div class="opn-multiselect-menu" role="dialog">
+                <div class="opn-multiselect-actions">
+                  <button type="button" class="secondary opn-multiselect-action" onclick={handleProjectTimingSelectAll}>
+                    All
+                  </button>
+                  <button type="button" class="secondary opn-multiselect-action" onclick={handleProjectTimingSelectNone}>
+                    None
+                  </button>
+                </div>
+                {#each PROJECT_TIMING_OPTIONS as projectTiming (projectTiming)}
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={selectedProjectTimings().has(projectTiming)}
+                      onchange={(event) => handleProjectTimingOptionChange(projectTiming, event)}
+                    />
+                    {projectTiming}
+                  </label>
+                {/each}
+              </div>
+            {/if}
+          </div>
+
           <label class="opn-inline-select">
             <span>View</span>
             <select value={projectsViewMode} onchange={handleProjectsViewModeChange}>
@@ -1408,7 +1524,7 @@
       showLeadingColumn={true}
     >
       {#if projectsViewMode === "project-task"}
-        {#each state.projects as project (project.path)}
+        {#each filteredProjects as project (project.path)}
           <tr>
             <td>
               {#if hasExpandableTasks(project)}

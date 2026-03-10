@@ -27,6 +27,16 @@
     onRendered?: (host: HTMLElement) => void;
   }
 
+  type ProjectTimingFilterOption = "Current" | "Due" | "Overdue" | "Tomorrow" | "Future" | "Needs Timing";
+  const PROJECT_TIMING_OPTIONS: ProjectTimingFilterOption[] = [
+    "Current",
+    "Due",
+    "Overdue",
+    "Tomorrow",
+    "Future",
+    "Needs Timing",
+  ];
+
   let { viewStore, variant } = $props<{ viewStore: ProjectViewStore; variant: ViewVariant }>();
 
   const state = $derived.by(() => fromStore(viewStore.state).current);
@@ -37,6 +47,9 @@
   let notesLineOverflowByPath = $state<Record<string, boolean>>({});
   let completingTaskIds = $state<string[]>([]);
   let dragImageElement: HTMLElement | null = null;
+  let showProjectTimingPicker = $state(false);
+  let projectTimingPickerWrap = $state<HTMLDivElement | null>(null);
+  let projectTimingFilter = $state<ProjectTimingFilterOption[]>([...PROJECT_TIMING_OPTIONS]);
 
   const statusOptions = $derived.by(() => {
     const values = new Set(state.statuses);
@@ -44,6 +57,26 @@
       values.add("Unknown");
     }
     return Array.from(values);
+  });
+
+  const selectedProjectTimingSet = $derived.by(
+    () => new Set(projectTimingFilter.filter((status) => PROJECT_TIMING_OPTIONS.includes(status)))
+  );
+
+  const filteredProjects = $derived.by(() => {
+    if (allProjectTimingSelected()) {
+      return state.projects;
+    }
+
+    const selected = selectedProjectTimings();
+    if (selected.size === 0) {
+      return [];
+    }
+
+    return state.projects.filter((project) => {
+      const timing = projectTimingStatuses(project);
+      return timing.some((status) => selected.has(status as ProjectTimingFilterOption));
+    });
   });
 
   const orderedStatuses = $derived.by(() => {
@@ -58,7 +91,7 @@
       map.set(status, []);
     }
 
-    for (const project of state.projects) {
+    for (const project of filteredProjects) {
       const status = project.status;
       if (!map.has(status)) {
         map.set(status, []);
@@ -118,6 +151,34 @@
     ) {
       statusColumnOrder = nextOrder;
     }
+  });
+
+  $effect(() => {
+    if (!showProjectTimingPicker) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent): void => {
+      if (event.target instanceof Node && projectTimingPickerWrap?.contains(event.target)) {
+        return;
+      }
+
+      showProjectTimingPicker = false;
+    };
+
+    const handleEscape = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        showProjectTimingPicker = false;
+      }
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown, true);
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown, true);
+      window.removeEventListener("keydown", handleEscape);
+    };
   });
 
   function allowDrop(event: DragEvent): void {
@@ -211,6 +272,52 @@
 
   function handleAddProjectInStatus(status: string): void {
     void viewStore.createProjectNoteInCurrentAreaWithStatus(status);
+  }
+
+  function toggleProjectTimingPicker(): void {
+    showProjectTimingPicker = !showProjectTimingPicker;
+  }
+
+  function selectedProjectTimings(): Set<ProjectTimingFilterOption> {
+    return selectedProjectTimingSet;
+  }
+
+  function allProjectTimingSelected(): boolean {
+    return selectedProjectTimings().size === PROJECT_TIMING_OPTIONS.length && PROJECT_TIMING_OPTIONS.length > 0;
+  }
+
+  function projectTimingButtonLabel(): string {
+    const selectedCount = selectedProjectTimings().size;
+    if (selectedCount === 0) {
+      return "Timing: None";
+    }
+
+    if (allProjectTimingSelected()) {
+      return "Timing: All";
+    }
+
+    return `Timing: ${selectedCount}`;
+  }
+
+  function handleProjectTimingSelectAll(): void {
+    projectTimingFilter = [...PROJECT_TIMING_OPTIONS];
+  }
+
+  function handleProjectTimingSelectNone(): void {
+    projectTimingFilter = [];
+  }
+
+  function handleProjectTimingOptionChange(projectTiming: ProjectTimingFilterOption, event: Event): void {
+    const checked = (event.currentTarget as HTMLInputElement).checked;
+    const next = new Set(selectedProjectTimings());
+    if (checked) {
+      next.add(projectTiming);
+    } else {
+      next.delete(projectTiming);
+    }
+
+    const normalized = PROJECT_TIMING_OPTIONS.filter((status) => next.has(status));
+    projectTimingFilter = normalized;
   }
 
   function handleKanbanColumnVisibility(status: string, visible: boolean): void {
@@ -735,6 +842,41 @@
           value={state.projectSearch}
           onChange={(value) => viewStore.setProjectSearch(value)}
         />
+
+        <div class="opn-multiselect-wrap" bind:this={projectTimingPickerWrap}>
+          <button
+            type="button"
+            class="secondary"
+            aria-haspopup="dialog"
+            aria-expanded={showProjectTimingPicker}
+            onclick={toggleProjectTimingPicker}
+          >
+            {projectTimingButtonLabel()}
+          </button>
+
+          {#if showProjectTimingPicker}
+            <div class="opn-multiselect-menu" role="dialog">
+              <div class="opn-multiselect-actions">
+                <button type="button" class="secondary opn-multiselect-action" onclick={handleProjectTimingSelectAll}>
+                  All
+                </button>
+                <button type="button" class="secondary opn-multiselect-action" onclick={handleProjectTimingSelectNone}>
+                  None
+                </button>
+              </div>
+              {#each PROJECT_TIMING_OPTIONS as projectTiming (projectTiming)}
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={selectedProjectTimings().has(projectTiming)}
+                    onchange={(event) => handleProjectTimingOptionChange(projectTiming, event)}
+                  />
+                  {projectTiming}
+                </label>
+              {/each}
+            </div>
+          {/if}
+        </div>
 
         <ColumnPicker
           label="Columns"
