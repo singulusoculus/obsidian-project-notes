@@ -1,5 +1,6 @@
 import type {
   KanbanCardField,
+  NoteTaskPriority,
   ProjectGridColumn,
   ProjectPropertyTemplate,
   ProjectPropertyType,
@@ -16,10 +17,11 @@ export const DEFAULT_STATUSES = [
 ];
 
 export const DEFAULT_PRIORITIES = ["Low", "Medium", "High"];
+export const PROJECT_NO_PRIORITY_TOKEN = "__project_no_priority__";
 
 export const LOCKED_PROPERTY_DEFAULTS: ProjectPropertyTemplate[] = [
   { name: "status", type: "multitext", defaultValue: "To Do" },
-  { name: "priority", type: "multitext", defaultValue: "Medium" },
+  { name: "priority", type: "multitext", defaultValue: "" },
   { name: "scheduled-date", type: "date", defaultValue: "" },
   { name: "start-date", type: "date", defaultValue: "" },
   { name: "finish-date", type: "date", defaultValue: "" },
@@ -99,6 +101,9 @@ export const DEFAULT_SETTINGS: ProjectSettings = {
   kanbanNotesPreviewWords: 100,
   kanbanNotesPreviewLines: 5,
   enableTriStateCheckboxes: true,
+  enableTaskAutoSuggest: true,
+  taskAutoSuggestMinMatch: 0,
+  taskAutoSuggestMaxSuggestions: 8,
   startupView: "none",
   openTarget: "new-tab",
   defaultProjectStatuses: ["Doing", "Awaiting Response", "Ongoing"],
@@ -114,6 +119,44 @@ export const TASK_SCHEDULED_EMOJI = "⏳";
 export const TASK_START_EMOJI = "🛫";
 export const TASK_DUE_EMOJI = "📅";
 export const TASK_FINISHED_EMOJI = "✅";
+export const TASK_PRIORITY_LOW_EMOJI = "🔵";
+export const TASK_PRIORITY_MEDIUM_EMOJI = "🟢";
+export const TASK_PRIORITY_HIGH_EMOJI = "🔴";
+export const TASK_PRIORITY_HIGHEST_EMOJI = "🔥";
+
+export const TASK_PRIORITY_ORDER: NoteTaskPriority[] = ["highest", "high", "medium", "low"];
+
+export const TASK_PRIORITY_METADATA: Record<
+  NoteTaskPriority,
+  { emoji: string; label: string; searchTerms: string[]; lineClass: string }
+> = {
+  highest: {
+    emoji: TASK_PRIORITY_HIGHEST_EMOJI,
+    label: "Highest",
+    searchTerms: ["highest", "fire", "urgent"],
+    lineClass: "opn-task-priority-highest-line",
+  },
+  high: {
+    emoji: TASK_PRIORITY_HIGH_EMOJI,
+    label: "High",
+    searchTerms: ["high", "red"],
+    lineClass: "opn-task-priority-high-line",
+  },
+  medium: {
+    emoji: TASK_PRIORITY_MEDIUM_EMOJI,
+    label: "Medium",
+    searchTerms: ["medium", "green"],
+    lineClass: "opn-task-priority-medium-line",
+  },
+  low: {
+    emoji: TASK_PRIORITY_LOW_EMOJI,
+    label: "Low",
+    searchTerms: ["low", "blue"],
+    lineClass: "opn-task-priority-low-line",
+  },
+};
+
+export const TASK_PRIORITY_EMOJIS = TASK_PRIORITY_ORDER.map((priority) => TASK_PRIORITY_METADATA[priority].emoji);
 
 export const VIEW_TYPES = {
   grid: "project-notes-grid",

@@ -1,6 +1,14 @@
 import type { App, TFile } from "obsidian";
-import type { AddTaskRequest, ProjectTask, TaskDateField, TaskState } from "../types";
-import { TASK_DUE_EMOJI, TASK_FINISHED_EMOJI, TASK_SCHEDULED_EMOJI, TASK_START_EMOJI } from "../constants";
+import type { AddTaskRequest, NoteTaskPriority, ProjectTask, TaskDateField, TaskState } from "../types";
+import {
+  TASK_DUE_EMOJI,
+  TASK_FINISHED_EMOJI,
+  TASK_PRIORITY_EMOJIS,
+  TASK_PRIORITY_METADATA,
+  TASK_PRIORITY_ORDER,
+  TASK_SCHEDULED_EMOJI,
+  TASK_START_EMOJI,
+} from "../constants";
 import { splitFrontmatter } from "../utils/markdown";
 import { isIsoDate, todayIsoDate } from "../utils/text";
 
@@ -16,6 +24,19 @@ const FINISHED_MARKER_REMOVE_REGEX = /\s*✅\s*\d{4}-\d{2}-\d{2}/gu;
 const HAS_FINISHED_MARKER_REGEX = /✅\s*\d{4}-\d{2}-\d{2}/u;
 const HAS_START_MARKER_REGEX = /🛫\s*\d{4}-\d{2}-\d{2}/u;
 const ALL_DATE_MARKERS_REGEX = /\s*[⏳🛫📅✅]\s*\d{4}-\d{2}-\d{2}/gu;
+const TASK_PRIORITY_REGEX = /[🔵🟢🔴🔥]/u;
+
+export interface EditorTaskLineContext {
+  lineText: string;
+  taskText: string;
+  lineIndex: number;
+  state: TaskState;
+  priority: NoteTaskPriority | null;
+  scheduledDate: string | null;
+  startDate: string | null;
+  dueDate: string | null;
+  finishedDate: string | null;
+}
 
 export class TaskParser {
   private readonly app: App;
@@ -53,6 +74,7 @@ export class TaskParser {
       const state = this.markerToState(match[2]);
       const checked = state === "checked";
       const text = match[3];
+      const priority = this.extractPriority(text);
       const scheduledDate = this.extractDate(SCHEDULED_REGEX, text);
       const startDate = this.extractDate(START_REGEX, text);
       const dueDate = this.extractDate(DUE_REGEX, text);
@@ -68,6 +90,7 @@ export class TaskParser {
         text,
         state,
         checked,
+        priority,
         scheduledDate,
         startDate,
         dueDate,
@@ -361,6 +384,63 @@ export class TaskParser {
     return isIsoDate(value) ? value : null;
   }
 
+  extractPriority(text: string): NoteTaskPriority | null {
+    for (const priority of TASK_PRIORITY_ORDER) {
+      if (text.includes(TASK_PRIORITY_METADATA[priority].emoji)) {
+        return priority;
+      }
+    }
+
+    return null;
+  }
+
+  hasTaskPriority(text: string): boolean {
+    return TASK_PRIORITY_REGEX.test(text);
+  }
+
+  getEditorTaskLineContext(content: string, lineIndex: number): EditorTaskLineContext | null {
+    const { body, frontmatterLineCount } = splitFrontmatter(content);
+    const bodyLineIndex = lineIndex - frontmatterLineCount;
+    if (bodyLineIndex < 0) {
+      return null;
+    }
+
+    const lines = body.split(/\r?\n/);
+    if (bodyLineIndex >= lines.length) {
+      return null;
+    }
+
+    const tasksHeadingIndex = this.findTasksHeadingIndex(lines);
+    if (tasksHeadingIndex < 0) {
+      return null;
+    }
+
+    const sectionEnd = this.findTasksSectionEnd(lines, tasksHeadingIndex);
+    if (bodyLineIndex <= tasksHeadingIndex || bodyLineIndex >= sectionEnd) {
+      return null;
+    }
+
+    const lineText = lines[bodyLineIndex];
+    const match = lineText.match(CHECKBOX_REGEX);
+    if (!match) {
+      return null;
+    }
+
+    const taskText = match[3];
+
+    return {
+      lineText,
+      taskText,
+      lineIndex,
+      state: this.markerToState(match[2]),
+      priority: this.extractPriority(taskText),
+      scheduledDate: this.extractDate(SCHEDULED_REGEX, taskText),
+      startDate: this.extractDate(START_REGEX, taskText),
+      dueDate: this.extractDate(DUE_REGEX, taskText),
+      finishedDate: this.extractDate(FINISHED_REGEX, taskText),
+    };
+  }
+
   static extractAreaTags(tags: string[], areaSlug: string): string[] {
     const prefix = `area/${areaSlug}`;
     return tags.filter((tag) => tag.startsWith(prefix));
@@ -416,10 +496,15 @@ export class TaskParser {
       due: this.extractDate(DUE_REGEX, text),
       finish: this.extractDate(FINISHED_REGEX, text),
     };
+    const priority = this.extractPriority(text);
 
     dates[field] = value;
 
-    const baseText = text.replace(ALL_DATE_MARKERS_REGEX, "").replace(/\s{2,}/g, " ").trim();
+    const baseText = text
+      .replace(ALL_DATE_MARKERS_REGEX, "")
+      .replace(this.priorityRemovalRegex(), "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
     const parts = [baseText];
 
     if (dates.scheduled) {
@@ -436,6 +521,10 @@ export class TaskParser {
 
     if (dates.finish) {
       parts.push(`${TASK_FINISHED_EMOJI} ${dates.finish}`);
+    }
+
+    if (priority) {
+      parts.push(TASK_PRIORITY_METADATA[priority].emoji);
     }
 
     const nextText = parts.filter((part) => part.length > 0).join(" ").trim();
@@ -505,5 +594,10 @@ export class TaskParser {
     }
 
     return this.removeFinishedDateMarkers(text);
+  }
+
+  private priorityRemovalRegex(): RegExp {
+    const escaped = TASK_PRIORITY_EMOJIS.join("");
+    return new RegExp(`\\s*[${escaped}]`, "gu");
   }
 }

@@ -1,5 +1,5 @@
 import { get, writable, type Writable } from "svelte/store";
-import { FILTER_NONE_TOKEN, KANBAN_CARD_BASE_FIELDS, PROJECT_GRID_BASE_COLUMNS } from "../constants";
+import { FILTER_NONE_TOKEN, KANBAN_CARD_BASE_FIELDS, PROJECT_GRID_BASE_COLUMNS, PROJECT_NO_PRIORITY_TOKEN } from "../constants";
 import type {
   BoardType,
   KanbanCardField,
@@ -136,7 +136,7 @@ export class ProjectViewStore {
         (status) => statuses.includes(status) || status === "Unknown" || status === FILTER_NONE_TOKEN,
       );
       const priorityFilter = current.priorityFilter.filter(
-        (priority) => priorities.includes(priority) || priority === FILTER_NONE_TOKEN,
+        (priority) => priorities.includes(priority) || priority === FILTER_NONE_TOKEN || priority === PROJECT_NO_PRIORITY_TOKEN,
       );
 
       const allAreaProjects = this.indexService.queryProjects({ areaId: currentAreaId });

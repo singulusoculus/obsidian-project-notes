@@ -18,6 +18,7 @@ export type ViewVariant = "default";
 export type SortDirection = "asc" | "desc";
 export type ProjectPropertyType = "text" | "number" | "checkbox" | "date" | "datetime" | "multitext" | "tags" | "aliases";
 export type TaskState = "unchecked" | "in-progress" | "checked";
+export type NoteTaskPriority = "low" | "medium" | "high" | "highest";
 export type KanbanCardBaseFieldId =
   | "name"
   | "priority"
@@ -103,6 +104,9 @@ export interface ProjectSettings {
   kanbanNotesPreviewWords: number;
   kanbanNotesPreviewLines: number;
   enableTriStateCheckboxes: boolean;
+  enableTaskAutoSuggest: boolean;
+  taskAutoSuggestMinMatch: number;
+  taskAutoSuggestMaxSuggestions: number;
   startupView: StartupView;
   openTarget: OpenTarget;
   defaultProjectStatuses: string[];
@@ -121,6 +125,7 @@ export interface ProjectTask {
   text: string;
   state: TaskState;
   checked: boolean;
+  priority: NoteTaskPriority | null;
   scheduledDate: string | null;
   startDate: string | null;
   dueDate: string | null;

@@ -259,6 +259,13 @@ export function parseSettings(data: Partial<ProjectSettings> | undefined): Proje
     kanbanNotesPreviewWords: normalizePositiveInteger(data?.kanbanNotesPreviewWords, DEFAULT_SETTINGS.kanbanNotesPreviewWords, 1),
     kanbanNotesPreviewLines: normalizePositiveInteger(data?.kanbanNotesPreviewLines, DEFAULT_SETTINGS.kanbanNotesPreviewLines, 1),
     enableTriStateCheckboxes: normalizeBoolean(data?.enableTriStateCheckboxes, DEFAULT_SETTINGS.enableTriStateCheckboxes),
+    enableTaskAutoSuggest: normalizeBoolean(data?.enableTaskAutoSuggest, DEFAULT_SETTINGS.enableTaskAutoSuggest),
+    taskAutoSuggestMinMatch: normalizePositiveInteger(data?.taskAutoSuggestMinMatch, DEFAULT_SETTINGS.taskAutoSuggestMinMatch, 0),
+    taskAutoSuggestMaxSuggestions: normalizePositiveInteger(
+      data?.taskAutoSuggestMaxSuggestions,
+      DEFAULT_SETTINGS.taskAutoSuggestMaxSuggestions,
+      1,
+    ),
     startupView: normalizeStartupView(data?.startupView),
     defaultProjectStatuses: normalizeList(data?.defaultProjectStatuses, DEFAULT_SETTINGS.defaultProjectStatuses),
     defaultSortBy: normalizeSortBy(data?.defaultSortBy),

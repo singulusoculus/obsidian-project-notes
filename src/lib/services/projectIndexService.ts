@@ -1,5 +1,5 @@
 import { type App, TFile } from "obsidian";
-import { UNKNOWN_STATUS, SNAPSHOT_VERSION } from "../constants";
+import { PROJECT_NO_PRIORITY_TOKEN, UNKNOWN_STATUS, SNAPSHOT_VERSION } from "../constants";
 import type {
   AddTaskRequest,
   AreaConfig,
@@ -184,6 +184,7 @@ export class ProjectIndexService {
     const search = spec.search?.trim().toLowerCase() ?? "";
     const statusFilter = (spec.statuses ?? []).map((status) => status.toLowerCase());
     const priorityFilter = (spec.priorities ?? []).map((priority) => priority.toLowerCase());
+    const includesNoPriority = priorityFilter.includes(PROJECT_NO_PRIORITY_TOKEN);
     const areaTagFilter = (spec.areaTags ?? []).map((tag) => tag.toLowerCase());
 
     const filtered = Array.from(this.projectsByPath.values()).filter((project) => {
@@ -195,8 +196,15 @@ export class ProjectIndexService {
         return false;
       }
 
-      if (priorityFilter.length > 0 && !priorityFilter.includes(project.priority.toLowerCase())) {
-        return false;
+      if (priorityFilter.length > 0) {
+        const normalizedPriority = project.priority.trim().toLowerCase();
+        if (normalizedPriority.length === 0) {
+          if (!includesNoPriority) {
+            return false;
+          }
+        } else if (!priorityFilter.includes(normalizedPriority)) {
+          return false;
+        }
       }
 
       if (areaTagFilter.length > 0) {
@@ -257,6 +265,7 @@ export class ProjectIndexService {
           task.text,
           task.projectName,
           (task.projectRequester ?? []).join(" "),
+          task.priority ?? "",
           task.scheduledDate ?? "",
           task.startDate ?? "",
           task.dueDate ?? "",
@@ -499,8 +508,8 @@ export class ProjectIndexService {
     const rawStatus = normalizeListOrStringValue(frontmatter.status) ?? "To Do";
     const statusIsUnknown = !statuses.includes(rawStatus);
 
-    const rawPriority = normalizeListOrStringValue(frontmatter.priority) ?? priorities[0] ?? "Medium";
-    const priority = priorities.includes(rawPriority) ? rawPriority : priorities[0] ?? "Medium";
+    const rawPriority = normalizeListOrStringValue(frontmatter.priority) ?? "";
+    const priority = priorities.includes(rawPriority) ? rawPriority : "";
 
     const tagSet = new Set<string>();
 

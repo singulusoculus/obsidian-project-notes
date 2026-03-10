@@ -1,6 +1,7 @@
 <script lang="ts">
   import { fromStore } from "svelte/store";
   import type {
+    NoteTaskPriority,
     ProjectMetadataKey,
     ProjectGridColumn,
     ProjectNote,
@@ -11,7 +12,12 @@
     TaskState,
     ViewVariant,
   } from "../lib/types";
-  import { FILTER_NONE_TOKEN } from "../lib/constants";
+  import {
+    FILTER_NONE_TOKEN,
+    PROJECT_NO_PRIORITY_TOKEN,
+    TASK_PRIORITY_METADATA,
+    TASK_PRIORITY_ORDER,
+  } from "../lib/constants";
   import type { ProjectViewStore } from "../lib/stores/projectViewStore";
   import ColumnPicker from "./shared/ColumnPicker.svelte";
   import GridTable from "./shared/GridTable.svelte";
@@ -26,7 +32,9 @@
 
   type TaskSortField = "state" | "task" | "project" | "requester" | "scheduled" | "start" | "due" | "finish" | "timing";
   type ProjectsViewMode = "project-task" | "parent-child";
+  type ProjectPriorityFilterOption = string | typeof PROJECT_NO_PRIORITY_TOKEN;
   type TaskStatusFilterOption = "To Do" | "Doing" | "Done";
+  type TaskPriorityFilterOption = NoteTaskPriority | "none";
   type TaskTimingFilterOption = "Current" | "Off Schedule" | "Due" | "Overdue" | "Tomorrow" | "Future" | "Needs Timing";
   type ProjectTimingFilterOption = TaskTimingFilterOption;
 
@@ -49,6 +57,7 @@
     "Tomorrow",
     "Needs Timing",
   ];
+  const TASK_PRIORITY_OPTIONS: TaskPriorityFilterOption[] = [...TASK_PRIORITY_ORDER, "none"];
   const PROJECT_TIMING_OPTIONS: ProjectTimingFilterOption[] = [...TASK_TIMING_OPTIONS];
 
   const TASK_GRID_COLUMNS: TaskGridColumnConfig[] = [
@@ -84,6 +93,7 @@
   let showStatusPicker = $state(false);
   let showPriorityPicker = $state(false);
   let showProjectTimingPicker = $state(false);
+  let showTaskPriorityPicker = $state(false);
   let showTaskStatusPicker = $state(false);
   let showTaskTimingPicker = $state(false);
   let projectsViewMode = $state<ProjectsViewMode>("project-task");
@@ -95,9 +105,11 @@
   let statusPickerWrap = $state<HTMLDivElement | null>(null);
   let priorityPickerWrap = $state<HTMLDivElement | null>(null);
   let projectTimingPickerWrap = $state<HTMLDivElement | null>(null);
+  let taskPriorityPickerWrap = $state<HTMLDivElement | null>(null);
   let taskStatusPickerWrap = $state<HTMLDivElement | null>(null);
   let taskTimingPickerWrap = $state<HTMLDivElement | null>(null);
   let projectTimingFilter = $state<ProjectTimingFilterOption[]>([...PROJECT_TIMING_OPTIONS]);
+  let taskPriorityFilter = $state<TaskPriorityFilterOption[]>([...TASK_PRIORITY_OPTIONS]);
   let taskStatusFilter = $state<TaskStatusFilterOption[]>([]);
   let taskTimingFilter = $state<TaskTimingFilterOption[]>([...DEFAULT_TASK_TIMING_FILTER]);
   let taskStatusFilterInitialized = $state(false);
@@ -110,6 +122,7 @@
     }
     return Array.from(values);
   });
+  const projectPriorityOptions = $derived.by(() => [...state.priorities, PROJECT_NO_PRIORITY_TOKEN] satisfies ProjectPriorityFilterOption[]);
 
   const taskStatusOptions = $derived.by(() =>
     state.triStateCheckboxes ? TRI_STATE_TASK_STATUS_OPTIONS : BINARY_TASK_STATUS_OPTIONS
@@ -119,6 +132,9 @@
   );
   const selectedProjectTimingSet = $derived.by(
     () => new Set(projectTimingFilter.filter((status) => PROJECT_TIMING_OPTIONS.includes(status)))
+  );
+  const selectedTaskPrioritySet = $derived.by(
+    () => new Set(taskPriorityFilter.filter((priority) => TASK_PRIORITY_OPTIONS.includes(priority)))
   );
   const selectedTaskTimingSet = $derived.by(
     () => new Set(taskTimingFilter.filter((status) => TASK_TIMING_OPTIONS.includes(status)))
@@ -276,7 +292,7 @@
   });
 
   $effect(() => {
-    if (!showStatusPicker && !showPriorityPicker && !showProjectTimingPicker && !showTaskStatusPicker && !showTaskTimingPicker) {
+    if (!showStatusPicker && !showPriorityPicker && !showProjectTimingPicker && !showTaskPriorityPicker && !showTaskStatusPicker && !showTaskTimingPicker) {
       return;
     }
 
@@ -286,6 +302,7 @@
         isInside(target, statusPickerWrap) ||
         isInside(target, priorityPickerWrap) ||
         isInside(target, projectTimingPickerWrap) ||
+        isInside(target, taskPriorityPickerWrap) ||
         isInside(target, taskStatusPickerWrap) ||
         isInside(target, taskTimingPickerWrap)
       ) {
@@ -346,6 +363,7 @@
     showStatusPicker = false;
     showPriorityPicker = false;
     showProjectTimingPicker = false;
+    showTaskPriorityPicker = false;
     showTaskStatusPicker = false;
     showTaskTimingPicker = false;
   }
@@ -503,6 +521,10 @@
       return false;
     }
 
+    if (!shouldShowTaskPriority(task)) {
+      return false;
+    }
+
     if (allTaskTimingSelected()) {
       return true;
     }
@@ -513,6 +535,23 @@
     }
 
     return timing.some((status) => selectedTaskTimings().has(status));
+  }
+
+  function shouldShowTaskPriority(task: ProjectTask): boolean {
+    if (allTaskPrioritiesSelected()) {
+      return true;
+    }
+
+    const selected = selectedTaskPriorities();
+    if (selected.size === 0) {
+      return false;
+    }
+
+    if (!task.priority) {
+      return selected.has("none");
+    }
+
+    return selected.has(task.priority);
   }
 
   function sortByProjectColumn(field: ProjectSortField): void {
@@ -611,6 +650,18 @@
     if (showProjectTimingPicker) {
       showStatusPicker = false;
       showPriorityPicker = false;
+      showTaskPriorityPicker = false;
+      showTaskStatusPicker = false;
+      showTaskTimingPicker = false;
+    }
+  }
+
+  function toggleTaskPriorityPicker(): void {
+    showTaskPriorityPicker = !showTaskPriorityPicker;
+    if (showTaskPriorityPicker) {
+      showStatusPicker = false;
+      showPriorityPicker = false;
+      showProjectTimingPicker = false;
       showTaskStatusPicker = false;
       showTaskTimingPicker = false;
     }
@@ -622,6 +673,7 @@
       showStatusPicker = false;
       showPriorityPicker = false;
       showProjectTimingPicker = false;
+      showTaskPriorityPicker = false;
       showTaskTimingPicker = false;
     }
   }
@@ -632,6 +684,7 @@
       showStatusPicker = false;
       showPriorityPicker = false;
       showProjectTimingPicker = false;
+      showTaskPriorityPicker = false;
       showTaskStatusPicker = false;
     }
   }
@@ -641,7 +694,7 @@
   }
 
   function allPrioritiesSelected(): boolean {
-    return selectedPriorities().size === state.priorities.length && state.priorities.length > 0;
+    return selectedPriorities().size === projectPriorityOptions.length && projectPriorityOptions.length > 0;
   }
 
   function statusButtonLabel(): string {
@@ -674,6 +727,10 @@
     return selectedTaskStatuses().size === taskStatusOptions.length && taskStatusOptions.length > 0;
   }
 
+  function allTaskPrioritiesSelected(): boolean {
+    return selectedTaskPriorities().size === TASK_PRIORITY_OPTIONS.length && TASK_PRIORITY_OPTIONS.length > 0;
+  }
+
   function allProjectTimingSelected(): boolean {
     return selectedProjectTimings().size === PROJECT_TIMING_OPTIONS.length && PROJECT_TIMING_OPTIONS.length > 0;
   }
@@ -689,6 +746,19 @@
     }
 
     return `Task Status: ${selectedCount}`;
+  }
+
+  function taskPriorityButtonLabel(): string {
+    const selectedCount = selectedTaskPriorities().size;
+    if (selectedCount === 0) {
+      return "Task Priority: None";
+    }
+
+    if (allTaskPrioritiesSelected()) {
+      return "Task Priority: All";
+    }
+
+    return `Task Priority: ${selectedCount}`;
   }
 
   function projectTimingButtonLabel(): string {
@@ -726,11 +796,19 @@
   }
 
   function selectedPriorities(): Set<string> {
-    return new Set(state.priorityFilter.filter((priority) => state.priorities.includes(priority)));
+    return new Set(
+      state.priorityFilter.filter(
+        (priority) => state.priorities.includes(priority) || priority === PROJECT_NO_PRIORITY_TOKEN,
+      ),
+    );
   }
 
   function selectedTaskStatuses(): Set<TaskStatusFilterOption> {
     return selectedTaskStatusSet;
+  }
+
+  function selectedTaskPriorities(): Set<TaskPriorityFilterOption> {
+    return selectedTaskPrioritySet;
   }
 
   function selectedProjectTimings(): Set<ProjectTimingFilterOption> {
@@ -750,7 +828,7 @@
   }
 
   function handlePrioritySelectAll(): void {
-    viewStore.setPriorityFilter(state.priorities);
+    viewStore.setPriorityFilter(projectPriorityOptions);
   }
 
   function handlePrioritySelectNone(): void {
@@ -763,6 +841,14 @@
 
   function handleTaskStatusSelectNone(): void {
     taskStatusFilter = [];
+  }
+
+  function handleTaskPrioritySelectAll(): void {
+    taskPriorityFilter = [...TASK_PRIORITY_OPTIONS];
+  }
+
+  function handleTaskPrioritySelectNone(): void {
+    taskPriorityFilter = [];
   }
 
   function handleProjectTimingSelectAll(): void {
@@ -814,6 +900,19 @@
 
     const normalized = taskStatusOptions.filter((status) => next.has(status));
     taskStatusFilter = normalized;
+  }
+
+  function handleTaskPriorityOptionChange(taskPriority: TaskPriorityFilterOption, event: Event): void {
+    const checked = (event.currentTarget as HTMLInputElement).checked;
+    const next = new Set(selectedTaskPriorities());
+    if (checked) {
+      next.add(taskPriority);
+    } else {
+      next.delete(taskPriority);
+    }
+
+    const normalized = TASK_PRIORITY_OPTIONS.filter((priority) => next.has(priority));
+    taskPriorityFilter = normalized;
   }
 
   function handleProjectTimingOptionChange(projectTiming: ProjectTimingFilterOption, event: Event): void {
@@ -1328,14 +1427,18 @@
                     None
                   </button>
                 </div>
-                {#each state.priorities as priority (priority)}
+                {#each projectPriorityOptions as priority (priority)}
                   <label>
                     <input
                       type="checkbox"
                       checked={selectedPriorities().has(priority)}
                       onchange={(event) => handlePriorityOptionChange(priority, event)}
                     />
-                    {priority}
+                    {#if priority === PROJECT_NO_PRIORITY_TOKEN}
+                      No Priority
+                    {:else}
+                      {priority}
+                    {/if}
                   </label>
                 {/each}
               </div>
@@ -1377,14 +1480,6 @@
             {/if}
           </div>
 
-          <label class="opn-inline-select">
-            <span>View</span>
-            <select value={projectsViewMode} onchange={handleProjectsViewModeChange}>
-              <option value="project-task">Project-Task</option>
-              <option value="parent-child">Parent-Child</option>
-            </select>
-          </label>
-
           <div class="opn-multiselect-wrap" bind:this={taskStatusPickerWrap}>
             <button
               type="button"
@@ -1419,6 +1514,15 @@
               </div>
             {/if}
           </div>
+          
+          <label class="opn-inline-select">
+            <span>View</span>
+            <select value={projectsViewMode} onchange={handleProjectsViewModeChange}>
+              <option value="project-task">Project-Task</option>
+              <option value="parent-child">Parent-Child</option>
+            </select>
+          </label>
+
         </div>
 
         <div class="opn-grid-filter-right">
@@ -1473,6 +1577,45 @@
                       onchange={(event) => handleTaskStatusOptionChange(taskStatus, event)}
                     />
                     {taskStatus}
+                  </label>
+                {/each}
+              </div>
+            {/if}
+          </div>
+
+          <div class="opn-multiselect-wrap" bind:this={taskPriorityPickerWrap}>
+            <button
+              type="button"
+              class="secondary"
+              aria-haspopup="dialog"
+              aria-expanded={showTaskPriorityPicker}
+              onclick={toggleTaskPriorityPicker}
+            >
+              {taskPriorityButtonLabel()}
+            </button>
+
+            {#if showTaskPriorityPicker}
+              <div class="opn-multiselect-menu" role="dialog">
+                <div class="opn-multiselect-actions">
+                  <button type="button" class="secondary opn-multiselect-action" onclick={handleTaskPrioritySelectAll}>
+                    All
+                  </button>
+                  <button type="button" class="secondary opn-multiselect-action" onclick={handleTaskPrioritySelectNone}>
+                    None
+                  </button>
+                </div>
+                {#each TASK_PRIORITY_OPTIONS as priority (priority)}
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={selectedTaskPriorities().has(priority)}
+                      onchange={(event) => handleTaskPriorityOptionChange(priority, event)}
+                    />
+                    {#if priority === "none"}
+                      No Priority
+                    {:else}
+                      {TASK_PRIORITY_METADATA[priority].emoji} {TASK_PRIORITY_METADATA[priority].label}
+                    {/if}
                   </label>
                 {/each}
               </div>
@@ -1573,6 +1716,7 @@
                     class={`opn-grid-inline-editor opn-badge-select opn-priority-badge ${priorityBadgeClass(project.priority)}`}
                     onchange={(event) => handlePriorityChange(project, event)}
                   >
+                    <option value="">No Priority</option>
                     {#each state.priorities as priority (priority)}
                       <option value={priority}>{priority}</option>
                     {/each}
@@ -1773,6 +1917,7 @@
                     class={`opn-grid-inline-editor opn-badge-select opn-priority-badge ${priorityBadgeClass(project.priority)}`}
                     onchange={(event) => handlePriorityChange(project, event)}
                   >
+                    <option value="">No Priority</option>
                     {#each state.priorities as priority (priority)}
                       <option value={priority}>{priority}</option>
                     {/each}
@@ -1943,6 +2088,7 @@
                                 class={`opn-grid-inline-editor opn-badge-select opn-priority-badge ${priorityBadgeClass(child.priority)}`}
                                 onchange={(event) => handlePriorityChange(child, event)}
                               >
+                                <option value="">No Priority</option>
                                 {#each state.priorities as priority (priority)}
                                   <option value={priority}>{priority}</option>
                                 {/each}

@@ -24,9 +24,12 @@ import {
   KANBAN_CARD_BASE_FIELDS,
   LOCKED_PROPERTY_NAMES,
   PROJECT_PROPERTY_TYPE_OPTIONS,
+  TASK_PRIORITY_METADATA,
+  TASK_PRIORITY_ORDER,
   VIEW_TYPES,
 } from "./src/lib/constants";
 import { NoteOpenService } from "./src/lib/services/noteOpenService";
+import { TaskEditorSuggest } from "./src/lib/services/taskEditorSuggest";
 import { ProjectIndexService } from "./src/lib/services/projectIndexService";
 import { ProjectNormalizer } from "./src/lib/services/projectNormalizer";
 import { TaskParser } from "./src/lib/services/taskParser";
@@ -121,6 +124,9 @@ const RESERVED_KANBAN_CARD_PROPERTY_KEYS = new Set<string>([
 
 function createTriStateLineDecorationExtension() {
   const inProgressLine = Decoration.line({ class: "opn-task-in-progress-line" });
+  const priorityLines = new Map(
+    TASK_PRIORITY_ORDER.map((priority) => [priority, Decoration.line({ class: TASK_PRIORITY_METADATA[priority].lineClass })]),
+  );
 
   return ViewPlugin.fromClass(
     class {
@@ -146,6 +152,18 @@ function createTriStateLineDecorationExtension() {
           while (true) {
             if (IN_PROGRESS_TASK_LINE_REGEX.test(line.text)) {
               builder.add(line.from, line.from, inProgressLine);
+            }
+
+            for (const priority of TASK_PRIORITY_ORDER) {
+              if (!line.text.includes(TASK_PRIORITY_METADATA[priority].emoji)) {
+                continue;
+              }
+
+              const decoration = priorityLines.get(priority);
+              if (decoration) {
+                builder.add(line.from, line.from, decoration);
+              }
+              break;
             }
 
             if (line.to >= end || line.number >= view.state.doc.lines) {
@@ -798,6 +816,52 @@ class ProjectNotesSettingTab extends PluginSettingTab {
           this.plugin.settings.enableTriStateCheckboxes = value;
           await this.plugin.saveSettings({ reconcile: false });
         });
+      });
+
+    new Setting(containerEl)
+      .setName("Task note auto-suggest")
+      .setDesc("Show task-entry suggestions for dates and priorities inside note `## Tasks` sections.")
+      .addToggle((toggle) => {
+        toggle.setValue(this.plugin.settings.enableTaskAutoSuggest).onChange(async (value) => {
+          this.plugin.settings.enableTaskAutoSuggest = value;
+          await this.plugin.saveSettings({ reconcile: false });
+        });
+      });
+
+    new Setting(containerEl)
+      .setName("Task auto-suggest minimum match")
+      .setDesc("How many characters to type before task note suggestions appear. Use `0` to show them immediately.")
+      .addText((text) => {
+        text
+          .setPlaceholder("0")
+          .setValue(String(this.plugin.settings.taskAutoSuggestMinMatch))
+          .onChange(async (value) => {
+            const parsed = Number(value);
+            if (!Number.isFinite(parsed) || parsed < 0) {
+              return;
+            }
+
+            this.plugin.settings.taskAutoSuggestMinMatch = Math.max(0, Math.floor(parsed));
+            await this.plugin.saveSettings({ reconcile: false });
+          });
+      });
+
+    new Setting(containerEl)
+      .setName("Task auto-suggest max results")
+      .setDesc("Maximum number of task note suggestions shown at once.")
+      .addText((text) => {
+        text
+          .setPlaceholder("8")
+          .setValue(String(this.plugin.settings.taskAutoSuggestMaxSuggestions))
+          .onChange(async (value) => {
+            const parsed = Number(value);
+            if (!Number.isFinite(parsed) || parsed < 1) {
+              return;
+            }
+
+            this.plugin.settings.taskAutoSuggestMaxSuggestions = Math.max(1, Math.floor(parsed));
+            await this.plugin.saveSettings({ reconcile: false });
+          });
       });
 
     new Setting(containerEl)
@@ -1472,6 +1536,7 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
     this.registerVaultEvents();
     this.registerEditorEvents();
     this.registerEditorExtension(createTriStateLineDecorationExtension());
+    this.registerEditorSuggest(new TaskEditorSuggest(this.app, () => this.settings, this.taskParser));
     this.seedActiveEditorContent();
     this.app.workspace.onLayoutReady(() => {
       void this.openStartupView();

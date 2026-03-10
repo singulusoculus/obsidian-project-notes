@@ -10,6 +10,24 @@
 - Do not log changes made solely to `DEVELOPMENT-LOG.md` itself.
 - Keep newest items first.
 
+## Untagged Version
+### Uncommitted Work
+#### 2026.03.10
+- Stopped defaulting blank project note priorities to a real priority during normalization and indexing, added a No Priority option to the Projects filter, and exposed No Priority in project priority editors so blank project priorities stay blank and filter correctly.
+- Separated the Projects and Tasks priority controls again by restoring the Projects row to the shared project-priority filter and labeling the Tasks row control as Task Priority.
+- Fixed the duplicate Tasks priority picker render path to handle the No Priority sentinel without indexing into task-priority emoji metadata, resolving the runtime `undefined.emoji` error.
+- Added a No Priority option to the Tasks view priority picker so tasks without any note-task priority metadata can be included or isolated explicitly.
+- Fixed the Tasks view markup to use the dedicated task-priority picker state and handlers; the previous render path was still bound to the shared project-priority control, so task priority selections had no effect.
+- Corrected the Tasks view Priority control to filter on each task's own note-task priority metadata instead of the parent project note priority, using the custom emoji priority scale in the picker.
+- Added a Priority filter control to the Tasks view controls row and wired task-row filtering to the parent project's selected priority values so the Tasks tab now respects the same priority filter state as the Projects tab.
+- Added note-task priority parsing and storage for the custom emoji scale (`🔵`, `🟢`, `🔴`, `🔥`) so task lines can round-trip priority metadata alongside existing tri-state and date markers.
+- Added a note-task editor suggestor that activates inside `## Tasks` sections, offering first-stage task property suggestions and second-stage natural-language date suggestions that write ISO dates back to note lines.
+- Added plugin settings and Live Preview styling hooks for task note auto-suggest and priority-aware task line decoration, then verified the implementation with `npm run build`.
+- Fixed task note date suggestions so selecting a date appends trailing space and releases the active date context, allowing additional task dates or priorities to be added immediately afterward.
+
+### e690ee5 Update agents, dev log, release notes
+#### 2026.03.10
+
 ## v0.0.5
 ### 477d2b0 bump version to v0.0.5
 #### 2026.03.10

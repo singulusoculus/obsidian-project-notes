@@ -572,6 +572,39 @@ input.opn-task-checkbox[data-task-state="in-progress"] {
   vertical-align: middle;
 }
 
+.markdown-source-view.mod-cm6 .opn-task-priority-highest-line {
+  background: color-mix(in srgb, var(--color-red) 16%, transparent);
+}
+
+.markdown-source-view.mod-cm6 .opn-task-priority-high-line {
+  background: color-mix(in srgb, var(--color-red) 10%, transparent);
+}
+
+.markdown-source-view.mod-cm6 .opn-task-priority-medium-line {
+  background: color-mix(in srgb, var(--color-green) 12%, transparent);
+}
+
+.markdown-source-view.mod-cm6 .opn-task-priority-low-line {
+  background: color-mix(in srgb, var(--color-blue) 12%, transparent);
+}
+
+.markdown-source-view.mod-cm6 .opn-task-priority-highest-line input.task-list-item-checkbox {
+  border-color: var(--color-red) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-red) 45%, transparent);
+}
+
+.markdown-source-view.mod-cm6 .opn-task-priority-high-line input.task-list-item-checkbox {
+  border-color: color-mix(in srgb, var(--color-red) 70%, var(--background-modifier-border)) !important;
+}
+
+.markdown-source-view.mod-cm6 .opn-task-priority-medium-line input.task-list-item-checkbox {
+  border-color: color-mix(in srgb, var(--color-green) 70%, var(--background-modifier-border)) !important;
+}
+
+.markdown-source-view.mod-cm6 .opn-task-priority-low-line input.task-list-item-checkbox {
+  border-color: color-mix(in srgb, var(--color-blue) 70%, var(--background-modifier-border)) !important;
+}
+
 a.opn-link {
   color: var(--text-accent);
   text-decoration: underline;
