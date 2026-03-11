@@ -372,12 +372,12 @@
     return timing;
   }
 
-  function shouldShowTask(task: ProjectTask): boolean {
+  function shouldShowTaskInProjectsView(task: ProjectTask): boolean {
     return selectedProjectTaskStatusSet.has(taskStatusForTask(task));
   }
 
   function shouldShowTaskInTasksView(task: ProjectTask): boolean {
-    if (!shouldShowTask(task)) {
+    if (!selectedTaskStatusSet.has(taskStatusForTask(task))) {
       return false;
     }
 
@@ -1795,7 +1795,7 @@
             <td colspan={state.projectGridColumns.length + 1}>
               <ul class="opn-task-list">
                 {#each sortedTasksByProject.get(project.path) ?? [] as task (task.id)}
-                  {#if shouldShowTask(task)}
+                  {#if shouldShowTaskInProjectsView(task)}
                     <li>
                       <input
                         type="checkbox"
