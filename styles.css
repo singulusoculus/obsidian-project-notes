@@ -480,15 +480,15 @@
   border: none;
 }
 
-input[type='date'] {
+input[type='date'].opn-grid-date-input.is-empty {
   background: none;
   border: none;
 }
 
-input[type="date"].is-empty:not(:hover):not(:focus):not(:active)::-webkit-datetime-edit-text,
-input[type="date"].is-empty:not(:hover):not(:focus):not(:active)::-webkit-datetime-edit-month-field,
-input[type="date"].is-empty:not(:hover):not(:focus):not(:active)::-webkit-datetime-edit-day-field,
-input[type="date"].is-empty:not(:hover):not(:focus):not(:active)::-webkit-datetime-edit-year-field {
+input[type="date"].opn-grid-date-input.is-empty:not(:hover):not(:focus):not(:active)::-webkit-datetime-edit-text,
+input[type="date"].opn-grid-date-input.is-empty:not(:hover):not(:focus):not(:active)::-webkit-datetime-edit-month-field,
+input[type="date"].opn-grid-date-input.is-empty:not(:hover):not(:focus):not(:active)::-webkit-datetime-edit-day-field,
+input[type="date"].opn-grid-date-input.is-empty:not(:hover):not(:focus):not(:active)::-webkit-datetime-edit-year-field {
   color: transparent;
 }
 
