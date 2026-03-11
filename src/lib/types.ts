@@ -19,6 +19,13 @@ export type SortDirection = "asc" | "desc";
 export type ProjectPropertyType = "text" | "number" | "checkbox" | "date" | "datetime" | "multitext" | "tags" | "aliases";
 export type TaskState = "unchecked" | "in-progress" | "checked";
 export type NoteTaskPriority = "low" | "medium" | "high" | "highest";
+export type GridTab = "projects" | "tasks" | "kanban";
+export type SavedViewTab = GridTab;
+export type TaskSortField = "state" | "task" | "project" | "requester" | "scheduled" | "start" | "due" | "finish" | "timing";
+export type TaskStatusFilterOption = "To Do" | "Doing" | "Done";
+export type TaskPriorityFilterOption = NoteTaskPriority | "none";
+export type TaskTimingFilterOption = "Current" | "Off Schedule" | "Due" | "Overdue" | "Tomorrow" | "Future" | "Needs Timing";
+export type ProjectTimingFilterOption = TaskTimingFilterOption;
 export type KanbanCardBaseFieldId =
   | "name"
   | "priority"
@@ -58,6 +65,13 @@ export interface KanbanCardField {
   label: string;
   kind: "base" | "property";
   propertyKey?: string;
+}
+
+export interface TaskGridColumn {
+  id: string;
+  label: string;
+  sortField: TaskSortField;
+  hideable?: boolean;
 }
 
 export interface ProjectPropertyTemplate {
@@ -114,6 +128,8 @@ export interface ProjectSettings {
   defaultSortDirection: SortDirection;
   kanbanHiddenStatuses: string[];
   cacheReconcileMinutes: number;
+  savedViewsByArea: Record<string, AreaSavedViews>;
+  activeSavedViewIdsByArea: Record<string, Partial<Record<SavedViewTab, string>>>;
 }
 
 export interface ProjectTask {
@@ -181,6 +197,63 @@ export interface TaskQuerySpec {
   sortDirection?: SortDirection;
 }
 
+export interface SavedViewBase {
+  id: string;
+  name: string;
+  tab: SavedViewTab;
+}
+
+export interface SavedProjectsView extends SavedViewBase {
+  tab: "projects";
+  columnIds: string[];
+  statusFilter: string[];
+  priorityFilter: string[];
+  timingFilter: ProjectTimingFilterOption[];
+  taskStatusFilter: TaskStatusFilterOption[];
+  sortBy: ProjectSortField;
+  sortDirection: SortDirection;
+  expandedProjectPaths: string[];
+}
+
+export interface SavedTasksView extends SavedViewBase {
+  tab: "tasks";
+  columnIds: string[];
+  taskStatusFilter: TaskStatusFilterOption[];
+  taskPriorityFilter: TaskPriorityFilterOption[];
+  timingFilter: TaskTimingFilterOption[];
+  sortBy: TaskSortField;
+  sortDirection: SortDirection;
+}
+
+export interface SavedKanbanView extends SavedViewBase {
+  tab: "kanban";
+  statusOrder: string[];
+  hiddenStatuses: string[];
+  cardFieldIds: string[];
+  nextTaskCount: number;
+  timingFilter: ProjectTimingFilterOption[];
+}
+
+export interface AreaSavedViews {
+  projects: SavedProjectsView[];
+  tasks: SavedTasksView[];
+  kanban: SavedKanbanView[];
+}
+
+export type SavedView = SavedProjectsView | SavedTasksView | SavedKanbanView;
+
+export interface SavedViewListItem {
+  id: string;
+  name: string;
+  label: string;
+  deletable: boolean;
+}
+
+export interface SavedViewPromptResult {
+  action: "update-current" | "save-new";
+  name: string;
+}
+
 export interface ProjectViewState {
   areas: AreaConfig[];
   currentAreaId: string | null;
@@ -188,18 +261,32 @@ export interface ProjectViewState {
   priorities: string[];
   boardType: BoardType;
   variant: ViewVariant;
-  gridTab: "projects" | "tasks" | "kanban";
+  gridTab: GridTab;
   projectSearch: string;
   taskSearch: string;
   statusFilter: string[];
   priorityFilter: string[];
+  projectTimingFilter: ProjectTimingFilterOption[];
+  projectTaskStatusFilter: TaskStatusFilterOption[];
+  projectExpandedPaths: string[];
   areaTagFilter: string[];
   availableAreaTags: string[];
   availableProjectGridColumns: ProjectGridColumn[];
   projectGridColumns: ProjectGridColumn[];
+  projectColumnOrderIds: string[];
+  availableTaskGridColumns: TaskGridColumn[];
+  taskGridColumns: TaskGridColumn[];
+  taskColumnOrderIds: string[];
+  taskStatusFilter: TaskStatusFilterOption[];
+  taskPriorityFilter: TaskPriorityFilterOption[];
+  taskTimingFilter: TaskTimingFilterOption[];
+  taskSortBy: TaskSortField;
+  taskSortDirection: SortDirection;
   availableKanbanCardFields: KanbanCardField[];
   kanbanCardFields: KanbanCardField[];
   kanbanNextTaskCount: number;
+  kanbanStatusOrder: string[];
+  kanbanTimingFilter: ProjectTimingFilterOption[];
   kanbanNotesPreviewWords: number;
   kanbanNotesPreviewLines: number;
   sortBy: ProjectSortField;
@@ -210,6 +297,9 @@ export interface ProjectViewState {
   triStateCheckboxes: boolean;
   hiddenKanbanStatuses: string[];
   showHiddenKanban: boolean;
+  savedViews: SavedViewListItem[];
+  activeSavedViewId: string | null;
+  activeSavedViewName: string;
 }
 
 export interface PluginPersistedData {

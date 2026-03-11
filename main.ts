@@ -36,6 +36,7 @@ import { TaskParser } from "./src/lib/services/taskParser";
 import { makeNewArea, parsePersistedData } from "./src/lib/settings";
 import { ProjectViewStore } from "./src/lib/stores/projectViewStore";
 import { resolveAreaForPath } from "./src/lib/utils/areas";
+import { appendRestoredDefaultView, ensureSavedViewsForArea } from "./src/lib/utils/savedViews";
 import {
   buildConfiguredPropertyTypeMap,
   canonicalPropertyName,
@@ -49,6 +50,8 @@ import type {
   AreaConfig,
   BoardType,
   OpenTarget,
+  SavedViewPromptResult,
+  SavedViewTab,
   ProjectPropertyTemplate,
   StartupView,
   ProjectNote,
@@ -225,6 +228,7 @@ class ProjectNotesView extends ItemView {
       createTask: (areaId) => this.plugin.createTaskInArea(areaId),
       getSettings: () => this.plugin.settings,
       persistSettings: () => this.plugin.saveSettings({ reconcile: false }),
+      promptSaveView: (currentName) => this.plugin.promptSaveView(currentName),
       boardType: definition.boardType,
       variant: definition.variant,
       initialAreaId: areaId,
@@ -408,6 +412,82 @@ class ProjectNameModal extends Modal {
       if (event.key === "Enter") {
         event.preventDefault();
         createButton.click();
+      }
+    });
+  }
+
+  onClose(): void {
+    if (!this.submitted) {
+      this.resolve(null);
+    }
+  }
+}
+
+class SaveViewModal extends Modal {
+  private readonly initialName: string;
+  private readonly resolve: (value: SavedViewPromptResult | null) => void;
+  private inputComponent: TextComponent | null = null;
+  private submitted = false;
+
+  constructor(app: App, initialName: string, resolve: (value: SavedViewPromptResult | null) => void) {
+    super(app);
+    this.initialName = initialName;
+    this.resolve = resolve;
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+
+    contentEl.createEl("h1", { text: "Save View" });
+
+    const inputWrapper = contentEl.createDiv({ cls: "opn-modal-field" });
+    inputWrapper.createEl("label", { text: "View Name", attr: { for: "opn-view-name" } });
+
+    this.inputComponent = new TextComponent(inputWrapper);
+    this.inputComponent.inputEl.id = "opn-view-name";
+    this.inputComponent.setPlaceholder("View name");
+    this.inputComponent.setValue(this.initialName);
+    this.inputComponent.inputEl.focus();
+    this.inputComponent.inputEl.select();
+
+    const actionRow = contentEl.createDiv({ cls: "opn-modal-actions" });
+
+    const updateButton = actionRow.createEl("button", { text: "Update Current View", cls: "mod-cta" });
+    updateButton.addEventListener("click", () => {
+      const name = this.inputComponent?.getValue().trim() ?? "";
+      if (!name) {
+        new Notice("View name is required.");
+        return;
+      }
+
+      this.submitted = true;
+      this.resolve({ action: "update-current", name });
+      this.close();
+    });
+
+    const saveNewButton = actionRow.createEl("button", { text: "Save New View" });
+    saveNewButton.addEventListener("click", () => {
+      const name = this.inputComponent?.getValue().trim() ?? "";
+      if (!name) {
+        new Notice("View name is required.");
+        return;
+      }
+
+      this.submitted = true;
+      this.resolve({ action: "save-new", name });
+      this.close();
+    });
+
+    const cancelButton = actionRow.createEl("button", { text: "Cancel" });
+    cancelButton.addEventListener("click", () => {
+      this.close();
+    });
+
+    this.inputComponent.inputEl.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        updateButton.click();
       }
     });
   }
@@ -1227,6 +1307,38 @@ class ProjectNotesSettingTab extends PluginSettingTab {
           });
       }
 
+      areaSettingsEl.createEl("h3", { text: "Saved Views" });
+
+      new Setting(areaSettingsEl)
+        .setName("Restore Projects Default View")
+        .setDesc("Append a new Default saved view for the Projects tab in this Area.")
+        .addButton((button) => {
+          button.setButtonText("Restore").onClick(async () => {
+            await this.plugin.restoreDefaultSavedView(area.id, "projects");
+            new Notice("Restored Projects Default view.");
+          });
+        });
+
+      new Setting(areaSettingsEl)
+        .setName("Restore Tasks Default View")
+        .setDesc("Append a new Default saved view for the Tasks tab in this Area.")
+        .addButton((button) => {
+          button.setButtonText("Restore").onClick(async () => {
+            await this.plugin.restoreDefaultSavedView(area.id, "tasks");
+            new Notice("Restored Tasks Default view.");
+          });
+        });
+
+      new Setting(areaSettingsEl)
+        .setName("Restore Kanban Default View")
+        .setDesc("Append a new Default saved view for the Kanban tab in this Area.")
+        .addButton((button) => {
+          button.setButtonText("Restore").onClick(async () => {
+            await this.plugin.restoreDefaultSavedView(area.id, "kanban");
+            new Notice("Restored Kanban Default view.");
+          });
+        });
+
       new Setting(areaSettingsEl)
         .setName("Remove Area")
         .addButton((button) => {
@@ -1498,6 +1610,8 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
     enableTriStateCheckboxes: DEFAULT_SETTINGS.enableTriStateCheckboxes,
     defaultProjectStatuses: [...DEFAULT_SETTINGS.defaultProjectStatuses],
     kanbanHiddenStatuses: [...DEFAULT_SETTINGS.kanbanHiddenStatuses],
+    savedViewsByArea: { ...DEFAULT_SETTINGS.savedViewsByArea },
+    activeSavedViewIdsByArea: { ...DEFAULT_SETTINGS.activeSavedViewIdsByArea },
   };
 
   normalizer!: ProjectNormalizer;
@@ -1514,6 +1628,7 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
   async onload(): Promise<void> {
     const persisted = parsePersistedData(await this.loadData());
     this.settings = persisted.settings;
+    const savedViewsInitialized = this.ensureSavedViewsInitialized();
 
     await this.ensureVaultPropertyTypes();
 
@@ -1543,6 +1658,14 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
     });
     this.addSettingTab(new ProjectNotesSettingTab(this.app, this));
     this.registerReconcileInterval();
+
+    if (savedViewsInitialized) {
+      await this.saveData({
+        schemaVersion: 1,
+        settings: this.settings,
+        snapshot: persisted.snapshot,
+      } satisfies PluginPersistedData);
+    }
   }
 
   onunload(): void {
@@ -1582,8 +1705,27 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
       await this.ensureVaultPropertyTypes();
     }
 
+    this.ensureSavedViewsInitialized();
+
     this.indexService.notifyExternalChange();
     this.schedulePersist();
+  }
+
+  async promptSaveView(currentName: string): Promise<SavedViewPromptResult | null> {
+    return new Promise((resolve) => {
+      const modal = new SaveViewModal(this.app, currentName, resolve);
+      modal.open();
+    });
+  }
+
+  async restoreDefaultSavedView(areaId: string, tab: SavedViewTab): Promise<void> {
+    const area = this.settings.areas.find((candidate) => candidate.id === areaId);
+    if (!area) {
+      return;
+    }
+
+    appendRestoredDefaultView(this.settings, area, tab);
+    await this.saveSettings({ reconcile: false });
   }
 
   openProjectNotesSettings(): void {
@@ -1608,6 +1750,17 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
     for (const definition of ALL_VIEW_DEFINITIONS) {
       this.registerView(definition.type, (leaf) => new ProjectNotesView(leaf, this, definition));
     }
+  }
+
+  private ensureSavedViewsInitialized(): boolean {
+    let changed = false;
+    for (const area of this.settings.areas) {
+      if (ensureSavedViewsForArea(this.settings, area)) {
+        changed = true;
+      }
+    }
+
+    return changed;
   }
 
   private registerCommands(): void {

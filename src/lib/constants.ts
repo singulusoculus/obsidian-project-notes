@@ -1,10 +1,14 @@
 import type {
+  ProjectTimingFilterOption,
   KanbanCardField,
   NoteTaskPriority,
   ProjectGridColumn,
   ProjectPropertyTemplate,
   ProjectPropertyType,
   ProjectSettings,
+  TaskGridColumn,
+  TaskStatusFilterOption,
+  TaskTimingFilterOption,
 } from "./types";
 
 export const DEFAULT_STATUSES = [
@@ -111,6 +115,8 @@ export const DEFAULT_SETTINGS: ProjectSettings = {
   defaultSortDirection: "asc",
   kanbanHiddenStatuses: ["Done", "Cancelled"],
   cacheReconcileMinutes: 10,
+  savedViewsByArea: {},
+  activeSavedViewIdsByArea: {},
 };
 
 export const SNAPSHOT_VERSION = 6;
@@ -165,3 +171,34 @@ export const VIEW_TYPES = {
 
 export const UNKNOWN_STATUS = "Unknown";
 export const FILTER_NONE_TOKEN = "__none__";
+export const TRI_STATE_TASK_STATUS_OPTIONS: TaskStatusFilterOption[] = ["To Do", "Doing", "Done"];
+export const BINARY_TASK_STATUS_OPTIONS: TaskStatusFilterOption[] = ["To Do", "Done"];
+export const TASK_TIMING_OPTIONS: TaskTimingFilterOption[] = [
+  "Current",
+  "Off Schedule",
+  "Due",
+  "Overdue",
+  "Tomorrow",
+  "Future",
+  "Needs Timing",
+];
+export const PROJECT_TIMING_OPTIONS: ProjectTimingFilterOption[] = [...TASK_TIMING_OPTIONS];
+export const DEFAULT_TASK_TIMING_FILTER: TaskTimingFilterOption[] = [
+  "Current",
+  "Off Schedule",
+  "Due",
+  "Overdue",
+  "Tomorrow",
+  "Needs Timing",
+];
+export const TASK_GRID_COLUMNS: TaskGridColumn[] = [
+  { id: "done", label: "Done", sortField: "state", hideable: true },
+  { id: "task", label: "Task", sortField: "task", hideable: false },
+  { id: "project", label: "Project", sortField: "project", hideable: true },
+  { id: "requester", label: "Requester", sortField: "requester", hideable: true },
+  { id: "scheduled", label: "Scheduled", sortField: "scheduled", hideable: true },
+  { id: "start", label: "Start", sortField: "start", hideable: true },
+  { id: "due", label: "Due", sortField: "due", hideable: true },
+  { id: "finish", label: "Finish", sortField: "finish", hideable: true },
+  { id: "timing", label: "Timing Status", sortField: "timing", hideable: true },
+];

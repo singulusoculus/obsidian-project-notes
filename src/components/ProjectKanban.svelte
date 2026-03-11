@@ -2,10 +2,12 @@
   import { Component, MarkdownRenderer } from "obsidian";
   import { fromStore } from "svelte/store";
   import { fade, slide } from "svelte/transition";
-  import type { ProjectNote, ProjectTask, TaskState, ViewVariant } from "../lib/types";
+  import type { ProjectNote, ProjectTask, ProjectTimingFilterOption, TaskState, ViewVariant } from "../lib/types";
+  import { PROJECT_TIMING_OPTIONS } from "../lib/constants";
   import type { ProjectViewStore } from "../lib/stores/projectViewStore";
   import ColumnPicker from "./shared/ColumnPicker.svelte";
   import SearchInput from "./shared/SearchInput.svelte";
+  import SavedViewPicker from "./shared/SavedViewPicker.svelte";
 
   interface CellSegment {
     text: string;
@@ -27,30 +29,17 @@
     onRendered?: (host: HTMLElement) => void;
   }
 
-  type ProjectTimingFilterOption = "Current" | "Off Schedule" | "Due" | "Overdue" | "Tomorrow" | "Future" | "Needs Timing";
-  const PROJECT_TIMING_OPTIONS: ProjectTimingFilterOption[] = [
-    "Current",
-    "Off Schedule",
-    "Due",
-    "Overdue",
-    "Tomorrow",
-    "Future",
-    "Needs Timing",
-  ];
-
   let { viewStore, variant } = $props<{ viewStore: ProjectViewStore; variant: ViewVariant }>();
 
   const state = $derived.by(() => fromStore(viewStore.state).current);
 
   let draggingPath = $state<string | null>(null);
-  let statusColumnOrder = $state<string[]>([]);
   let expandedNotesByPath = $state<Record<string, boolean>>({});
   let notesLineOverflowByPath = $state<Record<string, boolean>>({});
   let completingTaskIds = $state<string[]>([]);
   let dragImageElement: HTMLElement | null = null;
   let showProjectTimingPicker = $state(false);
   let projectTimingPickerWrap = $state<HTMLDivElement | null>(null);
-  let projectTimingFilter = $state<ProjectTimingFilterOption[]>([...PROJECT_TIMING_OPTIONS]);
 
   const statusOptions = $derived.by(() => {
     const values = new Set(state.statuses);
@@ -61,7 +50,7 @@
   });
 
   const selectedProjectTimingSet = $derived.by(
-    () => new Set(projectTimingFilter.filter((status) => PROJECT_TIMING_OPTIONS.includes(status)))
+    () => new Set(state.kanbanTimingFilter.filter((status) => PROJECT_TIMING_OPTIONS.includes(status)))
   );
 
   const filteredProjects = $derived.by(() => {
@@ -81,9 +70,9 @@
   });
 
   const orderedStatuses = $derived.by(() => {
-    const order = statusColumnOrder.length > 0 ? statusColumnOrder : statusOptions;
+    const order = state.kanbanStatusOrder.length > 0 ? state.kanbanStatusOrder : statusOptions;
     const byStatus = new Set(statusOptions);
-    return order.filter((status) => byStatus.has(status));
+    return [...order.filter((status) => byStatus.has(status)), ...statusOptions.filter((status) => !order.includes(status))];
   });
 
   const projectsByStatus = $derived.by(() => {
@@ -136,23 +125,6 @@
       draggable: false,
     }))
   );
-
-  $effect(() => {
-    if (statusColumnOrder.length === 0) {
-      statusColumnOrder = [...statusOptions];
-      return;
-    }
-
-    const preserved = statusColumnOrder.filter((status) => statusOptions.includes(status));
-    const missing = statusOptions.filter((status) => !preserved.includes(status));
-    const nextOrder = [...preserved, ...missing];
-    if (
-      nextOrder.length !== statusColumnOrder.length ||
-      nextOrder.some((status, index) => statusColumnOrder[index] !== status)
-    ) {
-      statusColumnOrder = nextOrder;
-    }
-  });
 
   $effect(() => {
     if (!showProjectTimingPicker) {
@@ -301,11 +273,11 @@
   }
 
   function handleProjectTimingSelectAll(): void {
-    projectTimingFilter = [...PROJECT_TIMING_OPTIONS];
+    viewStore.setKanbanTimingFilter([...PROJECT_TIMING_OPTIONS]);
   }
 
   function handleProjectTimingSelectNone(): void {
-    projectTimingFilter = [];
+    viewStore.setKanbanTimingFilter([]);
   }
 
   function handleProjectTimingOptionChange(projectTiming: ProjectTimingFilterOption, event: Event): void {
@@ -318,7 +290,7 @@
     }
 
     const normalized = PROJECT_TIMING_OPTIONS.filter((status) => next.has(status));
-    projectTimingFilter = normalized;
+    viewStore.setKanbanTimingFilter(normalized);
   }
 
   function handleKanbanColumnVisibility(status: string, visible: boolean): void {
@@ -329,11 +301,11 @@
       hidden.add(status);
     }
 
-    void viewStore.setKanbanHiddenStatuses(Array.from(hidden));
+    viewStore.setKanbanHiddenStatuses(Array.from(hidden));
   }
 
   function handleKanbanColumnOrder(orderedIds: string[]): void {
-    statusColumnOrder = [...orderedIds];
+    viewStore.setKanbanStatusOrder(orderedIds);
   }
 
   function handleKanbanCardFieldVisibility(fieldId: string, visible: boolean): void {
@@ -347,7 +319,7 @@
     const nextIds = state.availableKanbanCardFields
       .map((field) => field.id)
       .filter((id) => selected.has(id));
-    void viewStore.setKanbanCardFields(nextIds);
+    viewStore.setKanbanCardFields(nextIds);
   }
 
   function handleKanbanNextTaskCountChange(event: Event): void {
@@ -356,7 +328,23 @@
       return;
     }
 
-    void viewStore.setKanbanNextTaskCount(rawValue);
+    viewStore.setKanbanNextTaskCount(rawValue);
+  }
+
+  function currentSavedViewLabel(): string {
+    return state.savedViews.find((view) => view.id === state.activeSavedViewId)?.label ?? state.activeSavedViewName ?? "Default";
+  }
+
+  function handleSavedViewSelect(id: string): void {
+    void viewStore.selectSavedView(id);
+  }
+
+  function handleSavedViewDelete(id: string): void {
+    void viewStore.deleteSavedView(id);
+  }
+
+  function handleSaveView(): void {
+    void viewStore.promptSaveCurrentView();
   }
 
   function checkboxVisualState(node: HTMLInputElement, taskState: TaskState): { update: (nextState: TaskState) => void } {
@@ -899,6 +887,15 @@
       </div>
 
       <div class="opn-grid-filter-right">
+        <SavedViewPicker
+          currentLabel={currentSavedViewLabel()}
+          items={state.savedViews}
+          onSelect={handleSavedViewSelect}
+          onDelete={handleSavedViewDelete}
+        />
+        <button type="button" class="secondary" onclick={handleSaveView}>
+          Save
+        </button>
         <button type="button" class="mod-cta" onclick={() => void viewStore.createProjectNote()}>
           Add Project
         </button>

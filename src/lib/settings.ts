@@ -1,5 +1,14 @@
 import { DEFAULT_SETTINGS } from "./constants";
-import type { AreaConfig, PluginPersistedData, ProjectSettings } from "./types";
+import type {
+  AreaConfig,
+  AreaSavedViews,
+  PluginPersistedData,
+  ProjectSettings,
+  SavedKanbanView,
+  SavedProjectsView,
+  SavedTasksView,
+  SavedViewTab,
+} from "./types";
 import {
   isLockedPropertyName,
   normalizeDisabledPropertyNames,
@@ -66,6 +75,173 @@ function normalizeStringListRecord(value: unknown): Record<string, string[]> {
     if (entries.length > 0) {
       normalized[key] = Array.from(new Set(entries));
     }
+  }
+
+  return normalized;
+}
+
+function normalizeSavedProjectsViews(value: unknown): SavedProjectsView[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((candidate) => {
+      if (!candidate || typeof candidate !== "object") {
+        return null;
+      }
+
+      const raw = candidate as Partial<SavedProjectsView>;
+      if (typeof raw.id !== "string" || raw.id.trim().length === 0) {
+        return null;
+      }
+
+      return {
+        id: raw.id,
+        name: typeof raw.name === "string" && raw.name.trim().length > 0 ? raw.name : "Default",
+        tab: "projects" as const,
+        columnIds: Array.isArray(raw.columnIds) ? raw.columnIds.map((value) => String(value).trim()).filter((value) => value.length > 0) : [],
+        statusFilter: Array.isArray(raw.statusFilter) ? raw.statusFilter.map((value) => String(value).trim()).filter((value) => value.length > 0) : [],
+        priorityFilter: Array.isArray(raw.priorityFilter) ? raw.priorityFilter.map((value) => String(value).trim()).filter((value) => value.length > 0) : [],
+        timingFilter: Array.isArray(raw.timingFilter) ? raw.timingFilter.map((value) => String(value).trim()).filter((value) => value.length > 0) as SavedProjectsView["timingFilter"] : [],
+        taskStatusFilter: Array.isArray(raw.taskStatusFilter) ? raw.taskStatusFilter.map((value) => String(value).trim()).filter((value) => value.length > 0) as SavedProjectsView["taskStatusFilter"] : [],
+        sortBy: normalizeSortBy(raw.sortBy),
+        sortDirection: normalizeSortDirection(raw.sortDirection),
+        expandedProjectPaths: Array.isArray(raw.expandedProjectPaths)
+          ? raw.expandedProjectPaths.map((value) => String(value).trim()).filter((value) => value.length > 0)
+          : [],
+      };
+    })
+    .filter((view): view is SavedProjectsView => view !== null);
+}
+
+function normalizeTaskSortBy(value: unknown): SavedTasksView["sortBy"] {
+  if (
+    value === "state" ||
+    value === "task" ||
+    value === "project" ||
+    value === "requester" ||
+    value === "scheduled" ||
+    value === "start" ||
+    value === "due" ||
+    value === "finish" ||
+    value === "timing"
+  ) {
+    return value;
+  }
+
+  return "due";
+}
+
+function normalizeSavedTasksViews(value: unknown): SavedTasksView[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((candidate) => {
+      if (!candidate || typeof candidate !== "object") {
+        return null;
+      }
+
+      const raw = candidate as Partial<SavedTasksView>;
+      if (typeof raw.id !== "string" || raw.id.trim().length === 0) {
+        return null;
+      }
+
+      return {
+        id: raw.id,
+        name: typeof raw.name === "string" && raw.name.trim().length > 0 ? raw.name : "Default",
+        tab: "tasks" as const,
+        columnIds: Array.isArray(raw.columnIds) ? raw.columnIds.map((value) => String(value).trim()).filter((value) => value.length > 0) : [],
+        taskStatusFilter: Array.isArray(raw.taskStatusFilter) ? raw.taskStatusFilter.map((value) => String(value).trim()).filter((value) => value.length > 0) as SavedTasksView["taskStatusFilter"] : [],
+        taskPriorityFilter: Array.isArray(raw.taskPriorityFilter) ? raw.taskPriorityFilter.map((value) => String(value).trim()).filter((value) => value.length > 0) as SavedTasksView["taskPriorityFilter"] : [],
+        timingFilter: Array.isArray(raw.timingFilter) ? raw.timingFilter.map((value) => String(value).trim()).filter((value) => value.length > 0) as SavedTasksView["timingFilter"] : [],
+        sortBy: normalizeTaskSortBy(raw.sortBy),
+        sortDirection: normalizeSortDirection(raw.sortDirection),
+      };
+    })
+    .filter((view): view is SavedTasksView => view !== null);
+}
+
+function normalizeSavedKanbanViews(value: unknown): SavedKanbanView[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((candidate) => {
+      if (!candidate || typeof candidate !== "object") {
+        return null;
+      }
+
+      const raw = candidate as Partial<SavedKanbanView>;
+      if (typeof raw.id !== "string" || raw.id.trim().length === 0) {
+        return null;
+      }
+
+      return {
+        id: raw.id,
+        name: typeof raw.name === "string" && raw.name.trim().length > 0 ? raw.name : "Default",
+        tab: "kanban" as const,
+        statusOrder: Array.isArray(raw.statusOrder) ? raw.statusOrder.map((value) => String(value).trim()).filter((value) => value.length > 0) : [],
+        hiddenStatuses: Array.isArray(raw.hiddenStatuses) ? raw.hiddenStatuses.map((value) => String(value).trim()).filter((value) => value.length > 0) : [],
+        cardFieldIds: Array.isArray(raw.cardFieldIds) ? raw.cardFieldIds.map((value) => String(value).trim()).filter((value) => value.length > 0) : [],
+        nextTaskCount: normalizePositiveInteger(raw.nextTaskCount, 1, 1),
+        timingFilter: Array.isArray(raw.timingFilter) ? raw.timingFilter.map((value) => String(value).trim()).filter((value) => value.length > 0) as SavedKanbanView["timingFilter"] : [],
+      };
+    })
+    .filter((view): view is SavedKanbanView => view !== null);
+}
+
+function normalizeSavedViewsByArea(value: unknown): Record<string, AreaSavedViews> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const normalized: Record<string, AreaSavedViews> = {};
+  for (const [areaId, candidate] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof areaId !== "string" || areaId.trim().length === 0 || !candidate || typeof candidate !== "object") {
+      continue;
+    }
+
+    const raw = candidate as Partial<AreaSavedViews>;
+    normalized[areaId] = {
+      projects: normalizeSavedProjectsViews(raw.projects),
+      tasks: normalizeSavedTasksViews(raw.tasks),
+      kanban: normalizeSavedKanbanViews(raw.kanban),
+    };
+  }
+
+  return normalized;
+}
+
+function normalizeActiveSavedViewIdsByArea(
+  value: unknown,
+): Record<string, Partial<Record<SavedViewTab, string>>> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const normalized: Record<string, Partial<Record<SavedViewTab, string>>> = {};
+  for (const [areaId, candidate] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof areaId !== "string" || areaId.trim().length === 0 || !candidate || typeof candidate !== "object") {
+      continue;
+    }
+
+    const raw = candidate as Record<string, unknown>;
+    const record: Partial<Record<SavedViewTab, string>> = {};
+    if (typeof raw.projects === "string" && raw.projects.trim().length > 0) {
+      record.projects = raw.projects;
+    }
+    if (typeof raw.tasks === "string" && raw.tasks.trim().length > 0) {
+      record.tasks = raw.tasks;
+    }
+    if (typeof raw.kanban === "string" && raw.kanban.trim().length > 0) {
+      record.kanban = raw.kanban;
+    }
+
+    normalized[areaId] = record;
   }
 
   return normalized;
@@ -271,6 +447,8 @@ export function parseSettings(data: Partial<ProjectSettings> | undefined): Proje
     defaultSortBy: normalizeSortBy(data?.defaultSortBy),
     defaultSortDirection: normalizeSortDirection(data?.defaultSortDirection),
     kanbanHiddenStatuses: normalizeList(data?.kanbanHiddenStatuses, DEFAULT_SETTINGS.kanbanHiddenStatuses),
+    savedViewsByArea: normalizeSavedViewsByArea(data?.savedViewsByArea),
+    activeSavedViewIdsByArea: normalizeActiveSavedViewIdsByArea(data?.activeSavedViewIdsByArea),
   };
 
   const rawAreas = Array.isArray(data?.areas) ? data?.areas : [];
