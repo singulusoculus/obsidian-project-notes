@@ -480,6 +480,27 @@
   border: none;
 }
 
+.opn-grid-date-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.opn-grid-date-input.is-inferred {
+  padding-right: 0.9rem;
+}
+
+.opn-grid-date-marker {
+  position: absolute;
+  right: 0.1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1;
+  pointer-events: none;
+}
+
 input[type='date'].opn-grid-date-input.is-empty {
   background: none;
   border: none;
@@ -529,6 +550,12 @@ input[type="date"].opn-grid-date-input.is-empty:not(:hover):not(:focus):not(:act
 .opn-priority-badge {
   background: var(--background-secondary-alt);
   color: var(--text-normal);
+}
+
+.opn-grid-footnote {
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
 }
 
 .opn-task-detail-header {

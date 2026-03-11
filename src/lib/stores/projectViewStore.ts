@@ -379,6 +379,11 @@ export class ProjectViewStore {
       return;
     }
 
+    this.state.update((state) => ({
+      ...state,
+      activeSavedViewId: state.activeSavedViewId === viewId ? null : state.activeSavedViewId,
+    }));
+
     const settings = this.getSettings();
     settings.activeSavedViewIdsByArea[current.currentAreaId] = settings.activeSavedViewIdsByArea[current.currentAreaId] ?? {};
     settings.activeSavedViewIdsByArea[current.currentAreaId][current.gridTab] = viewId;

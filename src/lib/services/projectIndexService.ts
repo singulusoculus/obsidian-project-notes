@@ -1,5 +1,5 @@
 import { type App, TFile } from "obsidian";
-import { PROJECT_NO_PRIORITY_TOKEN, UNKNOWN_STATUS, SNAPSHOT_VERSION } from "../constants";
+import { INFER_DATES_PROPERTY, PROJECT_NO_PRIORITY_TOKEN, UNKNOWN_STATUS, SNAPSHOT_VERSION } from "../constants";
 import type {
   AddTaskRequest,
   AreaConfig,
@@ -17,6 +17,7 @@ import type {
 import { ProjectNormalizer } from "./projectNormalizer";
 import { TaskParser } from "./taskParser";
 import { resolveAreaForPath } from "../utils/areas";
+import { applyResolvedDates, createRawResolvedDates, projectTimingStatuses } from "../utils/inferredDates";
 import {
   isIsoDate,
   normalizeArrayValue,
@@ -40,6 +41,7 @@ const RESERVED_PROJECT_PROPERTY_KEYS = new Set<string>([
   "aliases",
   "status",
   "priority",
+  INFER_DATES_PROPERTY,
   "scheduled-date",
   "start-date",
   "finish-date",
@@ -77,7 +79,7 @@ export class ProjectIndexService {
   async initialize(snapshot?: ProjectIndexSnapshot): Promise<void> {
     if (snapshot && snapshot.version === SNAPSHOT_VERSION) {
       for (const project of snapshot.projects) {
-        this.projectsByPath.set(project.path, project);
+        this.projectsByPath.set(project.path, applyResolvedDates(project, this.getSettings().inferDates));
       }
       this.rebuildTaskIndex();
       this.notify();
@@ -226,6 +228,9 @@ export class ProjectIndexService {
           project.startDate ?? "",
           project.finishDate ?? "",
           project.dueDate ?? "",
+          project.resolvedDates.scheduled.value ?? "",
+          project.resolvedDates.start.value ?? "",
+          project.resolvedDates.due.value ?? "",
           project.tags.join(" "),
           project.parentProject ?? "",
           project.requester.join(" "),
@@ -269,6 +274,9 @@ export class ProjectIndexService {
           task.scheduledDate ?? "",
           task.startDate ?? "",
           task.dueDate ?? "",
+          task.resolvedDates.scheduled.value ?? "",
+          task.resolvedDates.start.value ?? "",
+          task.resolvedDates.due.value ?? "",
           task.finishedDate ?? "",
         ]
           .join(" ")
@@ -290,6 +298,8 @@ export class ProjectIndexService {
   }
 
   notifyExternalChange(): void {
+    this.rebuildResolvedDates();
+    this.rebuildTaskIndex();
     this.notify();
   }
 
@@ -528,6 +538,7 @@ export class ProjectIndexService {
     const parentProject = normalizeStringValue(frontmatter["parent-project"]);
     const customProperties = this.extractCustomProperties(frontmatter, area);
     const notesSectionText = this.extractNotesSectionText(content);
+    const inferDatesOverride = this.normalizeCheckboxOverride(frontmatter[INFER_DATES_PROPERTY]);
 
     const startDate = normalizeStringValue(frontmatter["start-date"]);
     const scheduledDate = normalizeStringValue(frontmatter["scheduled-date"]);
@@ -536,7 +547,7 @@ export class ProjectIndexService {
 
     const tasks = this.taskParser.parseTasks(content, file, displayName, requester);
 
-    return {
+    return applyResolvedDates({
       path: file.path,
       title: file.basename,
       aliases,
@@ -546,6 +557,7 @@ export class ProjectIndexService {
       status: statusIsUnknown ? UNKNOWN_STATUS : rawStatus,
       statusIsUnknown,
       priority,
+      inferDatesOverride,
       scheduledDate: isIsoDate(scheduledDate) ? scheduledDate : null,
       startDate: isIsoDate(startDate) ? startDate : null,
       finishDate: isIsoDate(finishDate) ? finishDate : null,
@@ -558,7 +570,12 @@ export class ProjectIndexService {
       createdAt: file.stat.ctime,
       updatedAt: file.stat.mtime,
       tasks,
-    };
+      resolvedDates: createRawResolvedDates({
+        scheduled: isIsoDate(scheduledDate) ? scheduledDate : null,
+        start: isIsoDate(startDate) ? startDate : null,
+        due: isIsoDate(dueDate) ? dueDate : null,
+      }),
+    }, this.getSettings().inferDates);
   }
 
   private extractNotesSectionText(content: string): string {
@@ -620,6 +637,33 @@ export class ProjectIndexService {
     return String(value);
   }
 
+  private normalizeCheckboxOverride(value: unknown): boolean | null {
+    if (value === null || value === undefined || value === "") {
+      return null;
+    }
+
+    if (typeof value === "boolean") {
+      return value;
+    }
+
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (normalized.length === 0) {
+        return null;
+      }
+
+      if (["true", "1", "yes", "y", "on"].includes(normalized)) {
+        return true;
+      }
+
+      if (["false", "0", "no", "n", "off"].includes(normalized)) {
+        return false;
+      }
+    }
+
+    return null;
+  }
+
   private resolveArea(path: string): AreaConfig | null {
     return resolveAreaForPath(this.getSettings().areas, path);
   }
@@ -651,13 +695,13 @@ export class ProjectIndexService {
       case "timing-status":
         return this.projectTimingSortValue(project);
       case "scheduled-date":
-        return project.scheduledDate;
+        return project.resolvedDates.scheduled.value;
       case "start-date":
-        return project.startDate;
+        return project.resolvedDates.start.value;
       case "finish-date":
         return project.finishDate;
       case "due-date":
-        return project.dueDate;
+        return project.resolvedDates.due.value;
       case "tags":
         return project.tags.join(" ");
       case "parent-project":
@@ -665,7 +709,7 @@ export class ProjectIndexService {
       case "requester":
         return project.requester.join(" ");
       default:
-        return project.dueDate;
+        return project.resolvedDates.due.value;
     }
   }
 
@@ -690,75 +734,12 @@ export class ProjectIndexService {
   }
 
   private projectTimingSortValue(project: ProjectNote): string | null {
-    const statuses = this.projectTimingStatuses(project);
+    const statuses = projectTimingStatuses(project);
     if (statuses.length === 0) {
       return null;
     }
 
     return statuses.join("|");
-  }
-
-  private projectTimingStatuses(project: ProjectNote): string[] {
-    const timing: string[] = [];
-    const today = this.relativeLocalIsoDate(0);
-    const tomorrow = this.relativeLocalIsoDate(1);
-    const terminalStatus = this.isTerminalProjectStatus(project.status) || Boolean(project.finishDate);
-    const plannedStartDate = project.scheduledDate ?? project.startDate;
-
-    if (
-      !terminalStatus &&
-      plannedStartDate &&
-      project.dueDate &&
-      plannedStartDate <= today &&
-      today <= project.dueDate
-    ) {
-      timing.push("Current");
-    }
-
-    if (!terminalStatus && project.scheduledDate && !project.startDate && today > project.scheduledDate) {
-      timing.push("Off Schedule");
-    }
-
-    if (!terminalStatus && project.dueDate === today) {
-      timing.push("Due");
-    }
-
-    if (!terminalStatus && project.dueDate && today > project.dueDate) {
-      timing.push("Overdue");
-    }
-
-    if (!terminalStatus && plannedStartDate === tomorrow) {
-      timing.push("Tomorrow");
-    }
-
-    if (!terminalStatus && plannedStartDate && plannedStartDate > tomorrow) {
-      timing.push("Future");
-    }
-
-    if (!terminalStatus && !plannedStartDate && !project.dueDate) {
-      timing.push("Needs Timing");
-    }
-
-    return timing;
-  }
-
-  private isTerminalProjectStatus(status: string | undefined): boolean {
-    const normalized = (status ?? "").trim().toLowerCase();
-    return normalized === "done" || normalized === "cancelled" || normalized === "canceled";
-  }
-
-  private relativeLocalIsoDate(daysFromToday: number): string {
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() + daysFromToday);
-    return this.localIsoDate(date);
-  }
-
-  private localIsoDate(date: Date): string {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
   }
 
   private compareTasks(
@@ -784,7 +765,14 @@ export class ProjectIndexService {
       return project?.updatedAt ?? null;
     }
 
-    return task.dueDate;
+    return task.resolvedDates.due.value;
+  }
+
+  private rebuildResolvedDates(): void {
+    const inferDates = this.getSettings().inferDates;
+    for (const [path, project] of this.projectsByPath.entries()) {
+      this.projectsByPath.set(path, applyResolvedDates(project, inferDates));
+    }
   }
 
   private rebuildTaskIndex(): void {

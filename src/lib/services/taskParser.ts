@@ -9,6 +9,7 @@ import {
   TASK_SCHEDULED_EMOJI,
   TASK_START_EMOJI,
 } from "../constants";
+import { createRawResolvedDates } from "../utils/inferredDates";
 import { splitFrontmatter } from "../utils/markdown";
 import { isIsoDate, todayIsoDate } from "../utils/text";
 
@@ -95,6 +96,11 @@ export class TaskParser {
         startDate,
         dueDate,
         finishedDate,
+        resolvedDates: createRawResolvedDates({
+          scheduled: scheduledDate,
+          start: startDate,
+          due: dueDate,
+        }),
         rawLine,
       });
     }

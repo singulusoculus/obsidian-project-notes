@@ -434,6 +434,7 @@ export function parseSettings(data: Partial<ProjectSettings> | undefined): Proje
     kanbanCardNextTaskCountByArea: normalizeNumberRecord(data?.kanbanCardNextTaskCountByArea, 1),
     kanbanNotesPreviewWords: normalizePositiveInteger(data?.kanbanNotesPreviewWords, DEFAULT_SETTINGS.kanbanNotesPreviewWords, 1),
     kanbanNotesPreviewLines: normalizePositiveInteger(data?.kanbanNotesPreviewLines, DEFAULT_SETTINGS.kanbanNotesPreviewLines, 1),
+    inferDates: normalizeBoolean(data?.inferDates, DEFAULT_SETTINGS.inferDates),
     enableTriStateCheckboxes: normalizeBoolean(data?.enableTriStateCheckboxes, DEFAULT_SETTINGS.enableTriStateCheckboxes),
     enableTaskAutoSuggest: normalizeBoolean(data?.enableTaskAutoSuggest, DEFAULT_SETTINGS.enableTaskAutoSuggest),
     taskAutoSuggestMinMatch: normalizePositiveInteger(data?.taskAutoSuggestMinMatch, DEFAULT_SETTINGS.taskAutoSuggestMinMatch, 0),

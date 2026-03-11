@@ -1,5 +1,11 @@
 import type { TFile } from "obsidian";
-import { DEFAULT_PROJECT_PROPERTIES, LOCKED_PROPERTY_DEFAULTS, LOCKED_PROPERTY_NAMES, PROJECT_PROPERTY_TYPE_OPTIONS } from "../constants";
+import {
+  DEFAULT_PROJECT_PROPERTIES,
+  INFER_DATES_PROPERTY,
+  LOCKED_PROPERTY_DEFAULTS,
+  LOCKED_PROPERTY_NAMES,
+  PROJECT_PROPERTY_TYPE_OPTIONS,
+} from "../constants";
 import type { AreaConfig, ProjectPropertyTemplate, ProjectPropertyType, ProjectSettings } from "../types";
 
 const VALID_PROPERTY_TYPES = new Set<ProjectPropertyType>(PROJECT_PROPERTY_TYPE_OPTIONS.map((option) => option.value));
@@ -226,6 +232,8 @@ export function resolveAreaPropertyTemplates(settings: ProjectSettings, area: Ar
 
 export function buildConfiguredPropertyTypeMap(settings: ProjectSettings): Record<string, ProjectPropertyType> {
   const typeMap: Record<string, ProjectPropertyType> = {};
+
+  typeMap[INFER_DATES_PROPERTY] = "checkbox";
 
   for (const property of ensureLockedPropertyTemplates(settings.defaultProperties ?? DEFAULT_PROJECT_PROPERTIES)) {
     typeMap[property.name] = property.type;

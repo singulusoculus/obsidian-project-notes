@@ -21,6 +21,7 @@ export type TaskState = "unchecked" | "in-progress" | "checked";
 export type NoteTaskPriority = "low" | "medium" | "high" | "highest";
 export type GridTab = "projects" | "tasks" | "kanban";
 export type SavedViewTab = GridTab;
+export type ResolvedDateKey = "scheduled" | "start" | "due";
 export type TaskSortField = "state" | "task" | "project" | "requester" | "scheduled" | "start" | "due" | "finish" | "timing";
 export type TaskStatusFilterOption = "To Do" | "Doing" | "Done";
 export type TaskPriorityFilterOption = NoteTaskPriority | "none";
@@ -117,6 +118,7 @@ export interface ProjectSettings {
   kanbanCardNextTaskCountByArea: Record<string, number>;
   kanbanNotesPreviewWords: number;
   kanbanNotesPreviewLines: number;
+  inferDates: boolean;
   enableTriStateCheckboxes: boolean;
   enableTaskAutoSuggest: boolean;
   taskAutoSuggestMinMatch: number;
@@ -130,6 +132,17 @@ export interface ProjectSettings {
   cacheReconcileMinutes: number;
   savedViewsByArea: Record<string, AreaSavedViews>;
   activeSavedViewIdsByArea: Record<string, Partial<Record<SavedViewTab, string>>>;
+}
+
+export interface ResolvedDateField {
+  value: string | null;
+  isInferred: boolean;
+}
+
+export interface ResolvedDateSet {
+  scheduled: ResolvedDateField;
+  start: ResolvedDateField;
+  due: ResolvedDateField;
 }
 
 export interface ProjectTask {
@@ -146,6 +159,7 @@ export interface ProjectTask {
   startDate: string | null;
   dueDate: string | null;
   finishedDate: string | null;
+  resolvedDates: ResolvedDateSet;
   rawLine: string;
 }
 
@@ -159,10 +173,12 @@ export interface ProjectNote {
   status: string;
   statusIsUnknown: boolean;
   priority: string;
+  inferDatesOverride: boolean | null;
   scheduledDate: string | null;
   startDate: string | null;
   finishDate: string | null;
   dueDate: string | null;
+  resolvedDates: ResolvedDateSet;
   tags: string[];
   parentProject: string | null;
   requester: string[];

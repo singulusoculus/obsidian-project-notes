@@ -21,6 +21,7 @@ import ProjectBoard from "./src/components/ProjectBoard.svelte";
 import {
   DEFAULT_SETTINGS,
   DEFAULT_VALUE_TOKENS,
+  INFER_DATES_PROPERTY,
   KANBAN_CARD_BASE_FIELDS,
   LOCKED_PROPERTY_NAMES,
   PROJECT_PROPERTY_TYPE_OPTIONS,
@@ -889,6 +890,16 @@ class ProjectNotesSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
+      .setName("Infer Dates")
+      .setDesc(`Global default for inferring scheduled, start, and due dates in views without writing them to notes. Override it per note with the checkbox property \`${INFER_DATES_PROPERTY}\`: set it to \`true\` to force inference for that note, \`false\` to disable inference for that note, or leave it off to use the global setting.`)
+      .addToggle((toggle) => {
+        toggle.setValue(this.plugin.settings.inferDates).onChange(async (value) => {
+          this.plugin.settings.inferDates = value;
+          await this.plugin.saveSettings({ reconcile: false });
+        });
+      });
+
+    new Setting(containerEl)
       .setName("Tri-state task checkboxes")
       .setDesc("Cycle task checkbox states as unchecked -> in progress ([/]) -> checked -> unchecked.")
       .addToggle((toggle) => {
@@ -1607,6 +1618,7 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
     kanbanCardNextTaskCountByArea: { ...DEFAULT_SETTINGS.kanbanCardNextTaskCountByArea },
     kanbanNotesPreviewWords: DEFAULT_SETTINGS.kanbanNotesPreviewWords,
     kanbanNotesPreviewLines: DEFAULT_SETTINGS.kanbanNotesPreviewLines,
+    inferDates: DEFAULT_SETTINGS.inferDates,
     enableTriStateCheckboxes: DEFAULT_SETTINGS.enableTriStateCheckboxes,
     defaultProjectStatuses: [...DEFAULT_SETTINGS.defaultProjectStatuses],
     kanbanHiddenStatuses: [...DEFAULT_SETTINGS.kanbanHiddenStatuses],

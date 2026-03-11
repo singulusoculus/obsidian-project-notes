@@ -2,9 +2,10 @@
   import { Component, MarkdownRenderer } from "obsidian";
   import { fromStore } from "svelte/store";
   import { fade, slide } from "svelte/transition";
-  import type { ProjectNote, ProjectTask, ProjectTimingFilterOption, TaskState, ViewVariant } from "../lib/types";
+  import type { ProjectNote, ProjectTask, ProjectTimingFilterOption, ResolvedDateKey, TaskState, ViewVariant } from "../lib/types";
   import { PROJECT_TIMING_OPTIONS } from "../lib/constants";
   import type { ProjectViewStore } from "../lib/stores/projectViewStore";
+  import { projectTimingStatuses as resolveProjectTimingStatuses } from "../lib/utils/inferredDates";
   import ColumnPicker from "./shared/ColumnPicker.svelte";
   import SearchInput from "./shared/SearchInput.svelte";
   import SavedViewPicker from "./shared/SavedViewPicker.svelte";
@@ -546,71 +547,12 @@
     };
   }
 
-  function localIsoDate(date: Date): string {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
+  function projectTimingStatuses(project: ProjectNote): ProjectTimingFilterOption[] {
+    return resolveProjectTimingStatuses(project);
   }
 
-  function relativeLocalIsoDate(daysFromToday: number): string {
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() + daysFromToday);
-    return localIsoDate(date);
-  }
-
-  function isTerminalProjectStatus(status: string | undefined): boolean {
-    const normalized = (status ?? "").trim().toLowerCase();
-    return normalized === "done" || normalized === "cancelled" || normalized === "canceled";
-  }
-
-  function plannedStartDate(scheduledDate: string | null, startDate: string | null): string | null {
-    return scheduledDate ?? startDate;
-  }
-
-  function projectTimingStatuses(project: ProjectNote): string[] {
-    const timing: string[] = [];
-    const today = relativeLocalIsoDate(0);
-    const tomorrow = relativeLocalIsoDate(1);
-    const terminalStatus = isTerminalProjectStatus(project.status) || Boolean(project.finishDate);
-    const timingStartDate = plannedStartDate(project.scheduledDate, project.startDate);
-
-    if (
-      !terminalStatus &&
-      timingStartDate &&
-      project.dueDate &&
-      timingStartDate <= today &&
-      today <= project.dueDate
-    ) {
-      timing.push("Current");
-    }
-
-    if (!terminalStatus && project.scheduledDate && !project.startDate && today > project.scheduledDate) {
-      timing.push("Off Schedule");
-    }
-
-    if (!terminalStatus && project.dueDate === today) {
-      timing.push("Due");
-    }
-
-    if (!terminalStatus && project.dueDate && today > project.dueDate) {
-      timing.push("Overdue");
-    }
-
-    if (!terminalStatus && timingStartDate === tomorrow) {
-      timing.push("Tomorrow");
-    }
-
-    if (!terminalStatus && timingStartDate && timingStartDate > tomorrow) {
-      timing.push("Future");
-    }
-
-    if (!terminalStatus && !timingStartDate && !project.dueDate) {
-      timing.push("Needs Timing");
-    }
-
-    return timing;
+  function projectDateValue(project: ProjectNote, key: ResolvedDateKey): string | null {
+    return project.resolvedDates[key].value;
   }
 
   function badgeToken(value: string): string {
@@ -947,24 +889,27 @@
                   {:else if field.id === "priority" || field.id === "timing-status"}
                     {""}
                   {:else if field.id === "scheduled-date"}
-                    {#if project.scheduledDate}
+                    {@const scheduledDate = projectDateValue(project, "scheduled")}
+                    {#if scheduledDate}
                       <div class="opn-kanban-field-row">
                         <span class="opn-kanban-field-label">Scheduled</span>
-                        <span class="opn-kanban-field-value">{project.scheduledDate}</span>
+                        <span class="opn-kanban-field-value">{scheduledDate}</span>
                       </div>
                     {/if}
                   {:else if field.id === "start-date"}
-                    {#if project.startDate}
+                    {@const startDate = projectDateValue(project, "start")}
+                    {#if startDate}
                       <div class="opn-kanban-field-row">
                         <span class="opn-kanban-field-label">Start</span>
-                        <span class="opn-kanban-field-value">{project.startDate}</span>
+                        <span class="opn-kanban-field-value">{startDate}</span>
                       </div>
                     {/if}
                   {:else if field.id === "due-date"}
-                    {#if project.dueDate}
+                    {@const dueDate = projectDateValue(project, "due")}
+                    {#if dueDate}
                       <div class="opn-kanban-field-row">
                         <span class="opn-kanban-field-label">Due</span>
-                        <span class="opn-kanban-field-value">{project.dueDate}</span>
+                        <span class="opn-kanban-field-value">{dueDate}</span>
                       </div>
                     {/if}
                   {:else if field.id === "finish-date"}

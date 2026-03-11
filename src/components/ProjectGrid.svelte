@@ -6,6 +6,8 @@
     ProjectGridColumn,
     ProjectNote,
     ProjectSortField,
+    ResolvedDateField,
+    ResolvedDateKey,
     TaskDateField,
     ProjectTask,
     TaskPriorityFilterOption,
@@ -27,6 +29,10 @@
     TRI_STATE_TASK_STATUS_OPTIONS,
   } from "../lib/constants";
   import type { ProjectViewStore } from "../lib/stores/projectViewStore";
+  import {
+    projectTimingStatuses as resolveProjectTimingStatuses,
+    taskTimingStatuses as resolveTaskTimingStatuses,
+  } from "../lib/utils/inferredDates";
   import ColumnPicker from "./shared/ColumnPicker.svelte";
   import GridTable from "./shared/GridTable.svelte";
   import SearchInput from "./shared/SearchInput.svelte";
@@ -189,6 +195,36 @@
     return rows;
   });
 
+  const visibleExpandableProjectPaths = $derived.by(() =>
+    filteredProjects
+      .filter((project) => hasExpandableTasks(project))
+      .map((project) => project.path)
+  );
+
+  const projectsGridHasInferredDates = $derived.by(() => {
+    const visibleDateFields = state.projectGridColumns
+      .map((column) => projectColumnDateKey(column.id))
+      .filter((field): field is ResolvedDateKey => field !== null);
+
+    if (visibleDateFields.length === 0) {
+      return false;
+    }
+
+    return filteredProjects.some((project) => visibleDateFields.some((field) => project.resolvedDates[field].isInferred));
+  });
+
+  const tasksGridHasInferredDates = $derived.by(() => {
+    const visibleDateFields = visibleTaskColumns
+      .map((column) => taskColumnDateKey(column.id))
+      .filter((field): field is ResolvedDateKey => field !== null);
+
+    if (visibleDateFields.length === 0) {
+      return false;
+    }
+
+    return sortedTasks.some((task) => visibleDateFields.some((field) => task.resolvedDates[field].isInferred));
+  });
+
   $effect(() => {
     if (!showStatusPicker && !showPriorityPicker && !showProjectTimingPicker && !showTaskPriorityPicker && !showProjectTaskStatusPicker && !showTaskStatusPicker && !showTaskTimingPicker) {
       return;
@@ -244,6 +280,33 @@
     viewStore.toggleProjectExpanded(path);
   }
 
+  function areAllVisibleProjectsExpanded(): boolean {
+    return visibleExpandableProjectPaths.length > 0 &&
+      visibleExpandableProjectPaths.every((path) => state.projectExpandedPaths.includes(path));
+  }
+
+  function projectExpandButtonLabel(): string {
+    return areAllVisibleProjectsExpanded() ? "Collapse Projects" : "Expand Projects";
+  }
+
+  function toggleAllVisibleProjectsExpanded(): void {
+    if (visibleExpandableProjectPaths.length === 0) {
+      return;
+    }
+
+    if (areAllVisibleProjectsExpanded()) {
+      viewStore.setProjectExpandedPaths(
+        state.projectExpandedPaths.filter((path) => !visibleExpandableProjectPaths.includes(path)),
+      );
+      return;
+    }
+
+    viewStore.setProjectExpandedPaths([
+      ...state.projectExpandedPaths,
+      ...visibleExpandableProjectPaths,
+    ]);
+  }
+
   function hasExpandableTasks(project: ProjectNote): boolean {
     return project.tasks.some((task) => task.state !== "checked");
   }
@@ -260,116 +323,52 @@
     return "To Do";
   }
 
-  function localIsoDate(date: Date): string {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }
-
-  function relativeLocalIsoDate(daysFromToday: number): string {
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() + daysFromToday);
-    return localIsoDate(date);
-  }
-
-  function isTerminalProjectStatus(status: string | undefined): boolean {
-    const normalized = (status ?? "").trim().toLowerCase();
-    return normalized === "done" || normalized === "cancelled" || normalized === "canceled";
-  }
-
-  function plannedStartDate(scheduledDate: string | null, startDate: string | null): string | null {
-    return scheduledDate ?? startDate;
-  }
-
   function taskTimingStatuses(task: ProjectTask): TaskTimingFilterOption[] {
-    const timing: TaskTimingFilterOption[] = [];
-    const today = relativeLocalIsoDate(0);
-    const tomorrow = relativeLocalIsoDate(1);
-    const projectStatus = state.projectStatusByPath[task.projectPath];
-    const timingStartDate = plannedStartDate(task.scheduledDate, task.startDate);
-
-    if (
-      !task.checked &&
-      !isTerminalProjectStatus(projectStatus) &&
-      timingStartDate &&
-      task.dueDate &&
-      timingStartDate <= today &&
-      today <= task.dueDate
-    ) {
-      timing.push("Current");
-    }
-
-    if (task.scheduledDate && !task.startDate && today > task.scheduledDate) {
-      timing.push("Off Schedule");
-    }
-
-    if (task.dueDate === today) {
-      timing.push("Due");
-    }
-
-    if (task.dueDate && today > task.dueDate) {
-      timing.push("Overdue");
-    }
-
-    if (timingStartDate === tomorrow) {
-      timing.push("Tomorrow");
-    }
-
-    if (timingStartDate && timingStartDate > tomorrow) {
-      timing.push("Future");
-    }
-
-    if (!timingStartDate && !task.dueDate) {
-      timing.push("Needs Timing");
-    }
-
-    return timing;
+    return resolveTaskTimingStatuses(task, state.projectStatusByPath[task.projectPath]);
   }
 
-  function projectTimingStatuses(project: ProjectNote): TaskTimingFilterOption[] {
-    const timing: TaskTimingFilterOption[] = [];
-    const today = relativeLocalIsoDate(0);
-    const tomorrow = relativeLocalIsoDate(1);
-    const terminalStatus = isTerminalProjectStatus(project.status) || Boolean(project.finishDate);
-    const timingStartDate = plannedStartDate(project.scheduledDate, project.startDate);
+  function projectTimingStatuses(project: ProjectNote): ProjectTimingFilterOption[] {
+    return resolveProjectTimingStatuses(project);
+  }
 
-    if (
-      !terminalStatus &&
-      timingStartDate &&
-      project.dueDate &&
-      timingStartDate <= today &&
-      today <= project.dueDate
-    ) {
-      timing.push("Current");
+  function projectColumnDateKey(columnId: string): ResolvedDateKey | null {
+    if (columnId === "scheduled-date") {
+      return "scheduled";
     }
 
-    if (!terminalStatus && project.scheduledDate && !project.startDate && today > project.scheduledDate) {
-      timing.push("Off Schedule");
+    if (columnId === "start-date") {
+      return "start";
     }
 
-    if (!terminalStatus && project.dueDate === today) {
-      timing.push("Due");
+    if (columnId === "due-date") {
+      return "due";
     }
 
-    if (!terminalStatus && project.dueDate && today > project.dueDate) {
-      timing.push("Overdue");
+    return null;
+  }
+
+  function taskColumnDateKey(columnId: string): ResolvedDateKey | null {
+    if (columnId === "scheduled") {
+      return "scheduled";
     }
 
-    if (!terminalStatus && timingStartDate === tomorrow) {
-      timing.push("Tomorrow");
+    if (columnId === "start") {
+      return "start";
     }
 
-    if (!terminalStatus && timingStartDate && timingStartDate > tomorrow) {
-      timing.push("Future");
+    if (columnId === "due") {
+      return "due";
     }
 
-    if (!terminalStatus && !timingStartDate && !project.dueDate) {
-      timing.push("Needs Timing");
-    }
+    return null;
+  }
 
-    return timing;
+  function projectDateField(project: ProjectNote, key: ResolvedDateKey): ResolvedDateField {
+    return project.resolvedDates[key];
+  }
+
+  function taskDateField(task: ProjectTask, key: ResolvedDateKey): ResolvedDateField {
+    return task.resolvedDates[key];
   }
 
   function shouldShowTaskInProjectsView(task: ProjectTask): boolean {
@@ -909,16 +908,16 @@
       case "requester":
         return compareText((left.projectRequester ?? []).join(", "), (right.projectRequester ?? []).join(", "));
       case "scheduled":
-        return compareNullableDate(left.scheduledDate, right.scheduledDate);
+        return compareNullableDate(left.resolvedDates.scheduled.value, right.resolvedDates.scheduled.value);
       case "start":
-        return compareNullableDate(left.startDate, right.startDate);
+        return compareNullableDate(left.resolvedDates.start.value, right.resolvedDates.start.value);
       case "finish":
         return compareNullableDate(left.finishedDate, right.finishedDate);
       case "timing":
         return compareText(timingSortValue(left), timingSortValue(right));
       case "due":
       default:
-        return compareNullableDate(left.dueDate, right.dueDate);
+        return compareNullableDate(left.resolvedDates.due.value, right.resolvedDates.due.value);
     }
   }
 
@@ -1299,6 +1298,12 @@
             onReorder={handleProjectColumnOrder}
           />
 
+          {#if visibleExpandableProjectPaths.length > 0}
+            <button type="button" class="secondary" onclick={toggleAllVisibleProjectsExpanded}>
+              {projectExpandButtonLabel()}
+            </button>
+          {/if}
+
           <div class="opn-multiselect-wrap" bind:this={statusPickerWrap}>
             <button
               type="button"
@@ -1658,19 +1663,31 @@
                   {/each}
                 </select>
               {:else if column.id === "scheduled-date"}
-                <input
-                  type="date"
-                  class={`opn-grid-inline-editor opn-grid-date-input ${project.scheduledDate ? "" : "is-empty"}`}
-                  value={project.scheduledDate ?? ""}
-                  onchange={(event) => handleProjectDateChange(project, "scheduled-date", event)}
-                />
+                {@const resolved = projectDateField(project, "scheduled")}
+                <div class="opn-grid-date-cell">
+                  <input
+                    type="date"
+                    class={`opn-grid-inline-editor opn-grid-date-input ${resolved.value ? "" : "is-empty"} ${resolved.isInferred ? "is-inferred" : ""}`}
+                    value={resolved.value ?? ""}
+                    onchange={(event) => handleProjectDateChange(project, "scheduled-date", event)}
+                  />
+                  {#if resolved.isInferred}
+                    <span class="opn-grid-date-marker">*</span>
+                  {/if}
+                </div>
               {:else if column.id === "start-date"}
-                <input
-                  type="date"
-                  class={`opn-grid-inline-editor opn-grid-date-input ${project.startDate ? "" : "is-empty"}`}
-                  value={project.startDate ?? ""}
-                  onchange={(event) => handleProjectDateChange(project, "start-date", event)}
-                />
+                {@const resolved = projectDateField(project, "start")}
+                <div class="opn-grid-date-cell">
+                  <input
+                    type="date"
+                    class={`opn-grid-inline-editor opn-grid-date-input ${resolved.value ? "" : "is-empty"} ${resolved.isInferred ? "is-inferred" : ""}`}
+                    value={resolved.value ?? ""}
+                    onchange={(event) => handleProjectDateChange(project, "start-date", event)}
+                  />
+                  {#if resolved.isInferred}
+                    <span class="opn-grid-date-marker">*</span>
+                  {/if}
+                </div>
               {:else if column.id === "finish-date"}
                 <input
                   type="date"
@@ -1679,12 +1696,18 @@
                   onchange={(event) => handleProjectDateChange(project, "finish-date", event)}
                 />
               {:else if column.id === "due-date"}
-                <input
-                  type="date"
-                  class={`opn-grid-inline-editor opn-grid-date-input ${project.dueDate ? "" : "is-empty"}`}
-                  value={project.dueDate ?? ""}
-                  onchange={(event) => handleProjectDateChange(project, "due-date", event)}
-                />
+                {@const resolved = projectDateField(project, "due")}
+                <div class="opn-grid-date-cell">
+                  <input
+                    type="date"
+                    class={`opn-grid-inline-editor opn-grid-date-input ${resolved.value ? "" : "is-empty"} ${resolved.isInferred ? "is-inferred" : ""}`}
+                    value={resolved.value ?? ""}
+                    onchange={(event) => handleProjectDateChange(project, "due-date", event)}
+                  />
+                  {#if resolved.isInferred}
+                    <span class="opn-grid-date-marker">*</span>
+                  {/if}
+                </div>
               {:else if column.id === "timing-status"}
                 {@const timingStatuses = projectTimingStatuses(project)}
                 {#if timingStatuses.length > 0}
@@ -1814,6 +1837,9 @@
         {/if}
       {/each}
     </GridTable>
+    {#if projectsGridHasInferredDates}
+      <div class="opn-grid-footnote">* inferred date shown in views only; not written to the note until edited</div>
+    {/if}
   {:else}
     <GridTable
       ariaLabel="Tasks grid"
@@ -1884,26 +1910,44 @@
                   {""}
                 {/if}
               {:else if column.id === "scheduled"}
-                <input
-                  type="date"
-                  class={`opn-grid-inline-editor opn-grid-date-input ${task.scheduledDate ? "" : "is-empty"}`}
-                  value={task.scheduledDate ?? ""}
-                  onchange={(event) => handleTaskDateChange(task, "scheduled", event)}
-                />
+                {@const resolved = taskDateField(task, "scheduled")}
+                <div class="opn-grid-date-cell">
+                  <input
+                    type="date"
+                    class={`opn-grid-inline-editor opn-grid-date-input ${resolved.value ? "" : "is-empty"} ${resolved.isInferred ? "is-inferred" : ""}`}
+                    value={resolved.value ?? ""}
+                    onchange={(event) => handleTaskDateChange(task, "scheduled", event)}
+                  />
+                  {#if resolved.isInferred}
+                    <span class="opn-grid-date-marker">*</span>
+                  {/if}
+                </div>
               {:else if column.id === "start"}
-                <input
-                  type="date"
-                  class={`opn-grid-inline-editor opn-grid-date-input ${task.startDate ? "" : "is-empty"}`}
-                  value={task.startDate ?? ""}
-                  onchange={(event) => handleTaskDateChange(task, "start", event)}
-                />
+                {@const resolved = taskDateField(task, "start")}
+                <div class="opn-grid-date-cell">
+                  <input
+                    type="date"
+                    class={`opn-grid-inline-editor opn-grid-date-input ${resolved.value ? "" : "is-empty"} ${resolved.isInferred ? "is-inferred" : ""}`}
+                    value={resolved.value ?? ""}
+                    onchange={(event) => handleTaskDateChange(task, "start", event)}
+                  />
+                  {#if resolved.isInferred}
+                    <span class="opn-grid-date-marker">*</span>
+                  {/if}
+                </div>
               {:else if column.id === "due"}
-                <input
-                  type="date"
-                  class={`opn-grid-inline-editor opn-grid-date-input ${task.dueDate ? "" : "is-empty"}`}
-                  value={task.dueDate ?? ""}
-                  onchange={(event) => handleTaskDateChange(task, "due", event)}
-                />
+                {@const resolved = taskDateField(task, "due")}
+                <div class="opn-grid-date-cell">
+                  <input
+                    type="date"
+                    class={`opn-grid-inline-editor opn-grid-date-input ${resolved.value ? "" : "is-empty"} ${resolved.isInferred ? "is-inferred" : ""}`}
+                    value={resolved.value ?? ""}
+                    onchange={(event) => handleTaskDateChange(task, "due", event)}
+                  />
+                  {#if resolved.isInferred}
+                    <span class="opn-grid-date-marker">*</span>
+                  {/if}
+                </div>
               {:else if column.id === "finish"}
                 <input
                   type="date"
@@ -1930,5 +1974,8 @@
         </tr>
       {/each}
     </GridTable>
+    {#if tasksGridHasInferredDates}
+      <div class="opn-grid-footnote">* inferred date shown in views only; not written to the note until edited</div>
+    {/if}
   {/if}
 </div>

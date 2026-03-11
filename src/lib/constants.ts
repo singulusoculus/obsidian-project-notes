@@ -22,6 +22,7 @@ export const DEFAULT_STATUSES = [
 
 export const DEFAULT_PRIORITIES = ["Low", "Medium", "High"];
 export const PROJECT_NO_PRIORITY_TOKEN = "__project_no_priority__";
+export const INFER_DATES_PROPERTY = "opn-infer-dates";
 
 export const LOCKED_PROPERTY_DEFAULTS: ProjectPropertyTemplate[] = [
   { name: "status", type: "multitext", defaultValue: "To Do" },
@@ -104,6 +105,7 @@ export const DEFAULT_SETTINGS: ProjectSettings = {
   kanbanCardNextTaskCountByArea: {},
   kanbanNotesPreviewWords: 100,
   kanbanNotesPreviewLines: 5,
+  inferDates: false,
   enableTriStateCheckboxes: true,
   enableTaskAutoSuggest: true,
   taskAutoSuggestMinMatch: 0,
@@ -119,7 +121,7 @@ export const DEFAULT_SETTINGS: ProjectSettings = {
   activeSavedViewIdsByArea: {},
 };
 
-export const SNAPSHOT_VERSION = 6;
+export const SNAPSHOT_VERSION = 7;
 
 export const TASK_SCHEDULED_EMOJI = "⏳";
 export const TASK_START_EMOJI = "🛫";
