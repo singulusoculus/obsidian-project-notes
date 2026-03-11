@@ -502,15 +502,6 @@ input[type="date"].opn-grid-date-input.is-empty:not(:hover):not(:focus):not(:act
   border: var(--input-border-width) solid var(--background-modifier-border) ;
 }
 
-/* .opn-grid-date-input.is-empty:not(:hover):not(:focus):not(:focus-visible)::-webkit-datetime-edit {
-  color: transparent;
-}
-
-.opn-grid-date-input::-webkit-calendar-picker-indicator {
-  opacity: 0;
-  pointer-events: none;
-} */
-
 .opn-grid-date-input:hover::-webkit-calendar-picker-indicator,
 .opn-grid-date-input:focus::-webkit-calendar-picker-indicator,
 .opn-grid-date-input:focus-visible::-webkit-calendar-picker-indicator {
