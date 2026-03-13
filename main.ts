@@ -1392,6 +1392,61 @@ class ProjectNotesSettingTab extends PluginSettingTab {
   }): void {
     const sectionEl = options.containerEl.createDiv({ cls: "opn-area-setting" });
     sectionEl.createEl("h4", { text: options.heading });
+    const listEl = sectionEl.createDiv({ cls: "opn-property-template-list" });
+    let draggingIndex: number | null = null;
+    let dragImageEl: HTMLElement | null = null;
+
+    const clearDropIndicators = (): void => {
+      listEl.querySelectorAll<HTMLElement>(".opn-property-template-row").forEach((row) => {
+        row.classList.remove("is-drop-before", "is-drop-after");
+      });
+    };
+
+    const cleanupDragState = (): void => {
+      draggingIndex = null;
+      clearDropIndicators();
+      listEl.querySelectorAll<HTMLElement>(".opn-property-template-row").forEach((row) => {
+        row.classList.remove("is-dragging");
+      });
+      dragImageEl?.remove();
+      dragImageEl = null;
+    };
+
+    const createDragImage = (sourceEl: HTMLElement): HTMLElement => {
+      const rect = sourceEl.getBoundingClientRect();
+      const clone = sourceEl.cloneNode(true);
+      const dragImage = clone instanceof HTMLElement ? clone : sourceEl;
+      dragImage.classList.add("opn-property-template-drag-image");
+      dragImage.style.position = "fixed";
+      dragImage.style.left = "-10000px";
+      dragImage.style.top = "-10000px";
+      dragImage.style.width = `${rect.width}px`;
+      dragImage.style.height = `${rect.height}px`;
+      dragImage.style.pointerEvents = "none";
+      dragImage.style.margin = "0";
+      dragImage.style.boxSizing = "border-box";
+      document.body.appendChild(dragImage);
+      return dragImage;
+    };
+
+    const moveTemplate = async (sourceIndex: number, targetIndex: number): Promise<void> => {
+      if (
+        sourceIndex === targetIndex ||
+        sourceIndex < 0 ||
+        targetIndex < 0 ||
+        sourceIndex >= options.templates.length ||
+        targetIndex > options.templates.length
+      ) {
+        return;
+      }
+
+      const nextTemplates = [...options.templates];
+      const [movedTemplate] = nextTemplates.splice(sourceIndex, 1);
+      nextTemplates.splice(targetIndex, 0, movedTemplate);
+      options.templates.splice(0, options.templates.length, ...nextTemplates);
+      await options.onChange();
+      this.display();
+    };
 
     if (options.templates.length === 0) {
       sectionEl.createEl("p", { text: "No properties configured." });
@@ -1401,7 +1456,74 @@ class ProjectNotesSettingTab extends PluginSettingTab {
       const locked = options.lockProtectedProperties && isLockedPropertyName(template.name);
       const propertyName = template.name || `Property ${index + 1}`;
 
-      const setting = new Setting(sectionEl);
+      const rowEl = listEl.createDiv({ cls: "opn-property-template-row" });
+      const setting = new Setting(rowEl);
+      setting.settingEl.classList.add("opn-property-template-setting");
+
+      const dragHandleEl = document.createElement("span");
+      dragHandleEl.className = "opn-property-template-handle";
+      dragHandleEl.textContent = "⋮⋮";
+      dragHandleEl.draggable = options.templates.length > 1;
+      setting.settingEl.insertBefore(dragHandleEl, setting.settingEl.firstChild);
+
+      dragHandleEl.addEventListener("dragstart", (event) => {
+        draggingIndex = index;
+        rowEl.classList.add("is-dragging");
+        if (event.dataTransfer) {
+          event.dataTransfer.setData("text/plain", String(index));
+          event.dataTransfer.effectAllowed = "move";
+          const rowRect = rowEl.getBoundingClientRect();
+          dragImageEl = createDragImage(rowEl);
+          event.dataTransfer.setDragImage(
+            dragImageEl,
+            Math.max(0, event.clientX - rowRect.left),
+            Math.max(0, event.clientY - rowRect.top),
+          );
+        }
+      });
+
+      dragHandleEl.addEventListener("dragend", () => {
+        cleanupDragState();
+      });
+
+      rowEl.addEventListener("dragover", (event) => {
+        if (draggingIndex === null) {
+          return;
+        }
+
+        event.preventDefault();
+        if (event.dataTransfer) {
+          event.dataTransfer.dropEffect = "move";
+        }
+
+        clearDropIndicators();
+        if (draggingIndex === index) {
+          return;
+        }
+
+        const bounds = rowEl.getBoundingClientRect();
+        const position = event.clientY >= bounds.top + bounds.height / 2 ? "is-drop-after" : "is-drop-before";
+        rowEl.classList.add(position);
+      });
+
+      rowEl.addEventListener("drop", async (event) => {
+        event.preventDefault();
+        const sourceIndex = Number(event.dataTransfer?.getData("text/plain") ?? draggingIndex);
+        const bounds = rowEl.getBoundingClientRect();
+        const insertAfter = event.clientY >= bounds.top + bounds.height / 2;
+        cleanupDragState();
+        if (!Number.isInteger(sourceIndex) || sourceIndex === index) {
+          return;
+        }
+
+        let targetIndex = insertAfter ? index + 1 : index;
+        if (sourceIndex < targetIndex) {
+          targetIndex -= 1;
+        }
+
+        await moveTemplate(sourceIndex, targetIndex);
+      });
+
       setting
         .setName(locked ? `${propertyName} (locked)` : propertyName)
         .setDesc("Name, type, default value")

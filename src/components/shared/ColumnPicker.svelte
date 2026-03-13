@@ -27,8 +27,11 @@
 
   let isOpen = $state(false);
   let draggingId = $state<string | null>(null);
+  let dropIndicatorId = $state<string | null>(null);
+  let dropIndicatorPosition = $state<"before" | "after" | null>(null);
   let orderedIds = $state<string[]>([]);
   let pickerWrap = $state<HTMLDivElement | null>(null);
+  let dragImageElement = $state<HTMLElement | null>(null);
 
   const itemById = $derived.by(() => new Map(items.map((item) => [item.id, item])));
   const orderedItems = $derived.by(() => {
@@ -94,6 +97,35 @@
     onToggle(id, visible);
   }
 
+  function clearDropIndicator(): void {
+    dropIndicatorId = null;
+    dropIndicatorPosition = null;
+  }
+
+  function cleanupDragState(): void {
+    draggingId = null;
+    clearDropIndicator();
+    dragImageElement?.remove();
+    dragImageElement = null;
+  }
+
+  function createDragImage(source: HTMLElement): HTMLElement {
+    const rect = source.getBoundingClientRect();
+    const clone = source.cloneNode(true);
+    const dragImage = clone instanceof HTMLElement ? clone : source;
+    dragImage.classList.add("opn-column-drag-image");
+    dragImage.style.position = "fixed";
+    dragImage.style.left = "-10000px";
+    dragImage.style.top = "-10000px";
+    dragImage.style.width = `${rect.width}px`;
+    dragImage.style.height = `${rect.height}px`;
+    dragImage.style.pointerEvents = "none";
+    dragImage.style.margin = "0";
+    dragImage.style.boxSizing = "border-box";
+    document.body.appendChild(dragImage);
+    return dragImage;
+  }
+
   function handleDragStart(event: DragEvent, id: string): void {
     if (!allowReorder) {
       return;
@@ -102,10 +134,20 @@
     if (event.dataTransfer) {
       event.dataTransfer.setData("text/plain", id);
       event.dataTransfer.effectAllowed = "move";
+      const dragSource = event.currentTarget;
+      if (dragSource instanceof HTMLElement) {
+        const rect = dragSource.getBoundingClientRect();
+        dragImageElement = createDragImage(dragSource);
+        event.dataTransfer.setDragImage(
+          dragImageElement,
+          Math.max(0, event.clientX - rect.left),
+          Math.max(0, event.clientY - rect.top),
+        );
+      }
     }
   }
 
-  function handleDragOver(event: DragEvent): void {
+  function handleDragOver(event: DragEvent, targetId: string): void {
     if (!allowReorder) {
       return;
     }
@@ -113,6 +155,21 @@
     if (event.dataTransfer) {
       event.dataTransfer.dropEffect = "move";
     }
+
+    if (draggingId === null || draggingId === targetId) {
+      clearDropIndicator();
+      return;
+    }
+
+    const dropTarget = event.currentTarget;
+    if (!(dropTarget instanceof HTMLElement)) {
+      clearDropIndicator();
+      return;
+    }
+
+    const bounds = dropTarget.getBoundingClientRect();
+    dropIndicatorId = targetId;
+    dropIndicatorPosition = event.clientY >= bounds.top + bounds.height / 2 ? "after" : "before";
   }
 
   function handleDrop(event: DragEvent, targetId: string): void {
@@ -121,8 +178,9 @@
     }
     event.preventDefault();
     const sourceId = event.dataTransfer?.getData("text/plain") || draggingId;
-    draggingId = null;
-    if (!sourceId || sourceId === targetId) {
+    const insertAfter = dropIndicatorId === targetId && dropIndicatorPosition === "after";
+    cleanupDragState();
+    if (!sourceId) {
       return;
     }
 
@@ -133,9 +191,17 @@
       return;
     }
 
+    let insertIndex = insertAfter ? targetIndex + 1 : targetIndex;
+    if (sourceIndex < insertIndex) {
+      insertIndex -= 1;
+    }
+    if (sourceIndex === insertIndex) {
+      return;
+    }
+
     const nextIds = [...currentIds];
     const [moved] = nextIds.splice(sourceIndex, 1);
-    nextIds.splice(targetIndex, 0, moved);
+    nextIds.splice(insertIndex, 0, moved);
     orderedIds = nextIds;
     onReorder(nextIds);
   }
@@ -144,7 +210,7 @@
     if (!allowReorder) {
       return;
     }
-    draggingId = null;
+    cleanupDragState();
   }
 </script>
 
@@ -166,8 +232,10 @@
           <li
             draggable={allowReorder && item.draggable !== false}
             class:dragging={draggingId === item.id}
+            class:is-drop-before={dropIndicatorId === item.id && dropIndicatorPosition === "before"}
+            class:is-drop-after={dropIndicatorId === item.id && dropIndicatorPosition === "after"}
             ondragstart={(event) => handleDragStart(event, item.id)}
-            ondragover={handleDragOver}
+            ondragover={(event) => handleDragOver(event, item.id)}
             ondrop={(event) => handleDrop(event, item.id)}
             ondragend={handleDragEnd}
           >
