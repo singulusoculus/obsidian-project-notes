@@ -52,6 +52,13 @@ Other default properties included by default:
 
 You can add more default properties globally and override them per Area. Property names, types, and default values are configurable. Extra user-defined properties are preserved.
 
+Date meaning:
+
+- `scheduled-date` = planned start date
+- `start-date` = actual start date
+- `due-date` = target completion date
+- `finish-date` = actual completion date
+
 Standard sections:
 
 - `## Tasks`
@@ -64,8 +71,8 @@ Standard sections:
 
 The plugin reads checklist items under `## Tasks` and supports structured task metadata inside the task line:
 
-- `⏳ YYYY-MM-DD` = Scheduled
-- `🛫 YYYY-MM-DD` = Start
+- `⏳ YYYY-MM-DD` = Scheduled planned start
+- `🛫 YYYY-MM-DD` = Start actual start
 - `📅 YYYY-MM-DD` = Due
 - `✅ YYYY-MM-DD` = Finish
 - `🔥`, `🔴`, `🟢`, `🔵` = task priority
@@ -92,7 +99,7 @@ The Projects view shows Area project notes in a grid with:
 - sortable columns
 - per-column show/hide and reorder control
 - status, priority, and timing filters
-- Project-Task and Parent-Child modes
+- expandable task rows
 - inline editing for status, priority, and project dates
 - expandable task sections for projects that still have active tasks
 
@@ -141,6 +148,7 @@ Notes previews support configurable word and line limits with `Read More` / `Rea
 Project timing statuses:
 
 - `Current`
+- `Today`
 - `Due`
 - `Overdue`
 - `Tomorrow`
@@ -151,6 +159,7 @@ Project timing statuses:
 Task timing statuses:
 
 - `Current`
+- `Today`
 - `Due`
 - `Overdue`
 - `Tomorrow`
@@ -158,7 +167,65 @@ Task timing statuses:
 - `Needs Timing`
 - `Off Schedule`
 
-`Off Schedule` means the item is past its scheduled date and still has no start date.
+Timing rules use the resolved view dates shown by the plugin. `Scheduled` is treated as the planned start date. `Start` is treated as the actual start date.
+
+Projects:
+
+- `Current`
+  - project is not `Done` or `Cancelled`
+  - `due-date` exists
+  - either `scheduled-date <= today` or `start-date <= today`
+  - and `today <= due-date`
+- `Today`
+  - project is not `Done` or `Cancelled`
+  - and any of `scheduled-date`, `start-date`, or `due-date` is today
+- `Off Schedule`
+  - project is not `Done` or `Cancelled`
+  - `scheduled-date` exists
+  - `start-date` is blank
+  - and today is later than `scheduled-date`
+- `Due`
+  - project is not `Done` or `Cancelled`
+  - and `due-date` is today
+- `Overdue`
+  - project is not `Done` or `Cancelled`
+  - `due-date` exists
+  - and today is later than `due-date`
+- `Tomorrow`
+  - project is not `Done` or `Cancelled`
+  - and `scheduled-date` is tomorrow
+- `Future`
+  - project is not `Done` or `Cancelled`
+  - and `scheduled-date` is later than tomorrow
+- `Needs Timing`
+  - project is not `Done` or `Cancelled`
+  - and any of `scheduled-date`, `start-date`, or `due-date` is blank
+
+Tasks:
+
+- `Current`
+  - task is not checked
+  - parent project is not `Done` or `Cancelled`
+  - `due-date` exists
+  - either task `scheduled-date <= today` or task `start-date <= today`
+  - and `today <= due-date`
+- `Today`
+  - any of task `scheduled-date`, `start-date`, or `due-date` is today
+- `Off Schedule`
+  - task `scheduled-date` exists
+  - task `start-date` is blank
+  - and today is later than `scheduled-date`
+- `Due`
+  - task `due-date` is today
+- `Overdue`
+  - task `due-date` exists
+  - and today is later than `due-date`
+- `Tomorrow`
+  - task `scheduled-date` is tomorrow
+- `Future`
+  - task `scheduled-date` is later than tomorrow
+- `Needs Timing`
+  - any of task `scheduled-date`, `start-date`, or `due-date` is blank
 
 Default project statuses include:
 
@@ -222,6 +289,8 @@ Project Notes writes changes back to the note itself:
 - setting a project `start-date` moves status to `Doing`
 - setting a project `finish-date` moves status to `Done`
 - changing project status to `Doing` or `Done` backfills today's missing start or finish date
+- `start-date` is the actual start date written to the note
+- `scheduled-date` is the planned start date written to the note
 
 ## Installation
 

@@ -694,6 +694,10 @@ input[type="date"].opn-grid-date-input.is-empty:not(:hover):not(:focus):not(:act
   background: color-mix(in srgb, var(--color-green) 20%, var(--background-secondary-alt));
 }
 
+.opn-task-timing-today {
+  background: color-mix(in srgb, var(--color-purple) 18%, var(--background-secondary-alt));
+}
+
 .opn-task-timing-due {
   background: color-mix(in srgb, var(--color-orange) 20%, var(--background-secondary-alt));
 }

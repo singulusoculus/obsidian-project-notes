@@ -159,10 +159,6 @@ export function applyResolvedDates(project: ProjectNote, inferDates: boolean): P
   };
 }
 
-export function plannedStartDate(resolvedDates: ResolvedDateSet): string | null {
-  return resolvedDates.scheduled.value ?? resolvedDates.start.value;
-}
-
 function isTerminalProjectStatus(status: string | undefined): boolean {
   const normalized = (status ?? "").trim().toLowerCase();
   return normalized === "done" || normalized === "cancelled" || normalized === "canceled";
@@ -187,39 +183,40 @@ export function projectTimingStatuses(project: ProjectNote): ProjectTimingFilter
   const today = relativeLocalIsoDate(0);
   const tomorrow = relativeLocalIsoDate(1);
   const terminalStatus = isTerminalProjectStatus(project.status) || Boolean(project.finishDate);
-  const timingStartDate = plannedStartDate(project.resolvedDates);
+  const scheduledDate = project.resolvedDates.scheduled.value;
+  const startDate = project.resolvedDates.start.value;
+  const dueDate = project.resolvedDates.due.value;
+  const hasStartedByToday = (scheduledDate !== null && scheduledDate <= today) || (startDate !== null && startDate <= today);
 
-  if (
-    !terminalStatus &&
-    timingStartDate &&
-    project.resolvedDates.due.value &&
-    timingStartDate <= today &&
-    today <= project.resolvedDates.due.value
-  ) {
+  if (!terminalStatus && dueDate && hasStartedByToday && today <= dueDate) {
     timing.push("Current");
   }
 
-  if (!terminalStatus && project.resolvedDates.scheduled.value && !project.resolvedDates.start.value && today > project.resolvedDates.scheduled.value) {
+  if (!terminalStatus && (scheduledDate === today || startDate === today || dueDate === today)) {
+    timing.push("Today");
+  }
+
+  if (!terminalStatus && scheduledDate && !startDate && today > scheduledDate) {
     timing.push("Off Schedule");
   }
 
-  if (!terminalStatus && project.resolvedDates.due.value === today) {
+  if (!terminalStatus && dueDate === today) {
     timing.push("Due");
   }
 
-  if (!terminalStatus && project.resolvedDates.due.value && today > project.resolvedDates.due.value) {
+  if (!terminalStatus && dueDate && today > dueDate) {
     timing.push("Overdue");
   }
 
-  if (!terminalStatus && timingStartDate === tomorrow) {
+  if (!terminalStatus && scheduledDate === tomorrow) {
     timing.push("Tomorrow");
   }
 
-  if (!terminalStatus && timingStartDate && timingStartDate > tomorrow) {
+  if (!terminalStatus && scheduledDate && scheduledDate > tomorrow) {
     timing.push("Future");
   }
 
-  if (!terminalStatus && !timingStartDate && !project.resolvedDates.due.value) {
+  if (!terminalStatus && (!scheduledDate || !startDate || !dueDate)) {
     timing.push("Needs Timing");
   }
 
@@ -233,40 +230,40 @@ export function taskTimingStatuses(
   const timing: TaskTimingFilterOption[] = [];
   const today = relativeLocalIsoDate(0);
   const tomorrow = relativeLocalIsoDate(1);
-  const timingStartDate = plannedStartDate(task.resolvedDates);
+  const scheduledDate = task.resolvedDates.scheduled.value;
+  const startDate = task.resolvedDates.start.value;
+  const dueDate = task.resolvedDates.due.value;
+  const hasStartedByToday = (scheduledDate !== null && scheduledDate <= today) || (startDate !== null && startDate <= today);
 
-  if (
-    !task.checked &&
-    !isTerminalProjectStatus(projectStatus) &&
-    timingStartDate &&
-    task.resolvedDates.due.value &&
-    timingStartDate <= today &&
-    today <= task.resolvedDates.due.value
-  ) {
+  if (!task.checked && !isTerminalProjectStatus(projectStatus) && dueDate && hasStartedByToday && today <= dueDate) {
     timing.push("Current");
   }
 
-  if (task.resolvedDates.scheduled.value && !task.resolvedDates.start.value && today > task.resolvedDates.scheduled.value) {
+  if (scheduledDate === today || startDate === today || dueDate === today) {
+    timing.push("Today");
+  }
+
+  if (scheduledDate && !startDate && today > scheduledDate) {
     timing.push("Off Schedule");
   }
 
-  if (task.resolvedDates.due.value === today) {
+  if (dueDate === today) {
     timing.push("Due");
   }
 
-  if (task.resolvedDates.due.value && today > task.resolvedDates.due.value) {
+  if (dueDate && today > dueDate) {
     timing.push("Overdue");
   }
 
-  if (timingStartDate === tomorrow) {
+  if (scheduledDate === tomorrow) {
     timing.push("Tomorrow");
   }
 
-  if (timingStartDate && timingStartDate > tomorrow) {
+  if (scheduledDate && scheduledDate > tomorrow) {
     timing.push("Future");
   }
 
-  if (!timingStartDate && !task.resolvedDates.due.value) {
+  if (!scheduledDate || !startDate || !dueDate) {
     timing.push("Needs Timing");
   }
 

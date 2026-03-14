@@ -25,7 +25,7 @@ export type ResolvedDateKey = "scheduled" | "start" | "due";
 export type TaskSortField = "state" | "task" | "project" | "requester" | "scheduled" | "start" | "due" | "finish" | "timing";
 export type TaskStatusFilterOption = "To Do" | "Doing" | "Done";
 export type TaskPriorityFilterOption = NoteTaskPriority | "none";
-export type TaskTimingFilterOption = "Current" | "Off Schedule" | "Due" | "Overdue" | "Tomorrow" | "Future" | "Needs Timing";
+export type TaskTimingFilterOption = "Current" | "Today" | "Off Schedule" | "Due" | "Overdue" | "Tomorrow" | "Future" | "Needs Timing";
 export type ProjectTimingFilterOption = TaskTimingFilterOption;
 export type KanbanCardBaseFieldId =
   | "name"

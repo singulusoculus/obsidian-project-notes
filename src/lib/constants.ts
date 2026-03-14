@@ -177,6 +177,7 @@ export const TRI_STATE_TASK_STATUS_OPTIONS: TaskStatusFilterOption[] = ["To Do",
 export const BINARY_TASK_STATUS_OPTIONS: TaskStatusFilterOption[] = ["To Do", "Done"];
 export const TASK_TIMING_OPTIONS: TaskTimingFilterOption[] = [
   "Current",
+  "Today",
   "Off Schedule",
   "Due",
   "Overdue",
@@ -187,6 +188,7 @@ export const TASK_TIMING_OPTIONS: TaskTimingFilterOption[] = [
 export const PROJECT_TIMING_OPTIONS: ProjectTimingFilterOption[] = [...TASK_TIMING_OPTIONS];
 export const DEFAULT_TASK_TIMING_FILTER: TaskTimingFilterOption[] = [
   "Current",
+  "Today",
   "Off Schedule",
   "Due",
   "Overdue",
