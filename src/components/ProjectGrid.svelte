@@ -307,8 +307,16 @@
     ]);
   }
 
+  function projectTasksForProjectsView(project: ProjectNote): ProjectTask[] {
+    return (sortedTasksByProject.get(project.path) ?? []).filter((task) => shouldShowTaskInProjectsView(task));
+  }
+
   function hasExpandableTasks(project: ProjectNote): boolean {
-    return project.tasks.some((task) => task.state !== "checked");
+    return projectTasksForProjectsView(project).length > 0;
+  }
+
+  function expandableTaskCount(project: ProjectNote): number {
+    return projectTasksForProjectsView(project).length;
   }
 
   function taskStatusForTask(task: ProjectTask): TaskStatusFilterOption {
@@ -1627,7 +1635,7 @@
                 class="secondary"
                 onclick={() => toggleExpand(project.path)}
               >
-                {state.projectExpandedPaths.includes(project.path) ? "▾" : "▸"}
+                {expandableTaskCount(project)} {state.projectExpandedPaths.includes(project.path) ? "▾" : "▸"}
               </button>
             {/if}
           </td>
@@ -1817,19 +1825,17 @@
           <tr class="opn-row-detail">
             <td colspan={state.projectGridColumns.length + 1}>
               <ul class="opn-task-list">
-                {#each sortedTasksByProject.get(project.path) ?? [] as task (task.id)}
-                  {#if shouldShowTaskInProjectsView(task)}
-                    <li>
-                      <input
-                        type="checkbox"
-                        class="opn-task-checkbox"
-                        checked={task.state === "checked"}
-                        use:checkboxVisualState={task.state}
-                        onclick={(event) => handleTaskCheckboxClick(event, task)}
-                      />
-                      <span>{task.text}</span>
-                    </li>
-                  {/if}
+                {#each projectTasksForProjectsView(project) as task (task.id)}
+                  <li>
+                    <input
+                      type="checkbox"
+                      class="opn-task-checkbox"
+                      checked={task.state === "checked"}
+                      use:checkboxVisualState={task.state}
+                      onclick={(event) => handleTaskCheckboxClick(event, task)}
+                    />
+                    <span>{task.text}</span>
+                  </li>
                 {/each}
               </ul>
             </td>
