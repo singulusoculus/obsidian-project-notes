@@ -168,14 +168,14 @@ Task timing statuses:
 - `Off Schedule`
 
 Timing rules use the resolved view dates shown by the plugin. `Scheduled` is treated as the planned start date. `Start` is treated as the actual start date.
+Timing filters on Projects, Tasks, and Kanban also include `Blank`, which matches items with no timing status.
 
 Projects:
 
 - `Current`
   - project is not `Done` or `Cancelled`
-  - `due-date` exists
-  - either `scheduled-date <= today` or `start-date <= today`
-  - and `today <= due-date`
+  - and either project `status` is `Doing`
+  - or `scheduled-date` and `due-date` both exist and `scheduled-date <= today <= due-date`
 - `Today`
   - project is not `Done` or `Cancelled`
   - and any of `scheduled-date`, `start-date`, or `due-date` is today
@@ -199,16 +199,15 @@ Projects:
   - and `scheduled-date` is later than tomorrow
 - `Needs Timing`
   - project is not `Done` or `Cancelled`
-  - and any of `scheduled-date`, `start-date`, or `due-date` is blank
+  - and all of `scheduled-date`, `start-date`, and `due-date` are blank
 
 Tasks:
 
 - `Current`
   - task is not checked
   - parent project is not `Done` or `Cancelled`
-  - `due-date` exists
-  - either task `scheduled-date <= today` or task `start-date <= today`
-  - and `today <= due-date`
+  - and either task checkbox state is `In Progress`
+  - or task `scheduled-date` and `due-date` both exist and `scheduled-date <= today <= due-date`
 - `Today`
   - any of task `scheduled-date`, `start-date`, or `due-date` is today
 - `Off Schedule`
@@ -225,7 +224,7 @@ Tasks:
 - `Future`
   - task `scheduled-date` is later than tomorrow
 - `Needs Timing`
-  - any of task `scheduled-date`, `start-date`, or `due-date` is blank
+  - all of task `scheduled-date`, `start-date`, and `due-date` are blank
 
 Default project statuses include:
 

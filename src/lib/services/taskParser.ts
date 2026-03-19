@@ -39,6 +39,12 @@ export interface EditorTaskLineContext {
   finishedDate: string | null;
 }
 
+interface SimpleTaskMarkerChange {
+  lineIndex: number;
+  previousMatch: RegExpMatchArray;
+  currentMatch: RegExpMatchArray;
+}
+
 export class TaskParser {
   private readonly app: App;
   private readonly inFlight = new Set<string>();
@@ -329,50 +335,34 @@ export class TaskParser {
       };
     }
 
-    const previousSectionEnd = this.findTasksSectionEnd(previousLines, previousTasksHeadingIndex);
-    const currentSectionEnd = this.findTasksSectionEnd(currentLines, currentTasksHeadingIndex);
-    const maxSharedIndex = Math.min(previousSectionEnd, currentSectionEnd);
+    const markerChange = this.findSimpleTaskMarkerChange(
+      previousLines,
+      currentLines,
+      previousTasksHeadingIndex,
+      currentTasksHeadingIndex,
+    );
 
-    let changed = false;
-
-    for (let index = currentTasksHeadingIndex + 1; index < maxSharedIndex; index += 1) {
-      const currentLine = currentLines[index];
-      const currentMatch = currentLine.match(CHECKBOX_REGEX);
-      if (!currentMatch) {
-        continue;
-      }
-
-      const previousLine = previousLines[index];
-      const previousMatch = previousLine?.match(CHECKBOX_REGEX);
-      if (!previousMatch) {
-        continue;
-      }
-
-      const previousState = this.markerToState(previousMatch[2]);
-      const currentState = this.markerToState(currentMatch[2]);
-
-      if (previousState === currentState) {
-        continue;
-      }
-
-      const desiredState = this.resolveTriStateFromEditorTransition(previousState, currentState);
-      if (desiredState === currentState) {
-        continue;
-      }
-
-      const checkmark = this.stateToMarker(desiredState);
-      const text = this.normalizeTaskTextForState(currentMatch[3], desiredState);
-
-      currentLines[index] = `${currentMatch[1]}- [${checkmark}] ${text}`;
-      changed = true;
-    }
-
-    if (!changed) {
+    if (!markerChange) {
       return {
         changed: false,
         content: currentContent,
       };
     }
+
+    const previousState = this.markerToState(markerChange.previousMatch[2]);
+    const currentState = this.markerToState(markerChange.currentMatch[2]);
+    const desiredState = this.resolveTriStateFromEditorTransition(previousState, currentState);
+
+    if (desiredState === currentState) {
+      return {
+        changed: false,
+        content: currentContent,
+      };
+    }
+
+    const checkmark = this.stateToMarker(desiredState);
+    const text = this.normalizeTaskTextForState(markerChange.currentMatch[3], desiredState);
+    currentLines[markerChange.lineIndex] = `${markerChange.currentMatch[1]}- [${checkmark}] ${text}`;
 
     return {
       changed: true,
@@ -588,6 +578,58 @@ export class TaskParser {
     }
 
     return current;
+  }
+
+  private findSimpleTaskMarkerChange(
+    previousLines: string[],
+    currentLines: string[],
+    previousTasksHeadingIndex: number,
+    currentTasksHeadingIndex: number,
+  ): SimpleTaskMarkerChange | null {
+    const previousSectionEnd = this.findTasksSectionEnd(previousLines, previousTasksHeadingIndex);
+    const currentSectionEnd = this.findTasksSectionEnd(currentLines, currentTasksHeadingIndex);
+    const previousLength = previousSectionEnd - previousTasksHeadingIndex;
+    const currentLength = currentSectionEnd - currentTasksHeadingIndex;
+
+    if (previousLength !== currentLength) {
+      return null;
+    }
+
+    let changedLine: SimpleTaskMarkerChange | null = null;
+
+    for (let offset = 1; offset < currentLength; offset += 1) {
+      const previousLine = previousLines[previousTasksHeadingIndex + offset];
+      const currentLine = currentLines[currentTasksHeadingIndex + offset];
+
+      if (previousLine === currentLine) {
+        continue;
+      }
+
+      const previousMatch = previousLine?.match(CHECKBOX_REGEX);
+      const currentMatch = currentLine?.match(CHECKBOX_REGEX);
+      if (!previousMatch || !currentMatch) {
+        return null;
+      }
+
+      const isSameTaskLine =
+        previousMatch[1] === currentMatch[1] &&
+        previousMatch[3] === currentMatch[3];
+      if (!isSameTaskLine) {
+        return null;
+      }
+
+      if (changedLine) {
+        return null;
+      }
+
+      changedLine = {
+        lineIndex: currentTasksHeadingIndex + offset,
+        previousMatch,
+        currentMatch,
+      };
+    }
+
+    return changedLine;
   }
 
   private normalizeTaskTextForState(text: string, state: TaskState): string {

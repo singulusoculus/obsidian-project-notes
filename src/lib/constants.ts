@@ -184,6 +184,7 @@ export const TASK_TIMING_OPTIONS: TaskTimingFilterOption[] = [
   "Tomorrow",
   "Future",
   "Needs Timing",
+  "Blank",
 ];
 export const PROJECT_TIMING_OPTIONS: ProjectTimingFilterOption[] = [...TASK_TIMING_OPTIONS];
 export const DEFAULT_TASK_TIMING_FILTER: TaskTimingFilterOption[] = [

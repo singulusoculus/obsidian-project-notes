@@ -5,7 +5,10 @@
   import type { ProjectNote, ProjectTask, ProjectTimingFilterOption, ResolvedDateKey, TaskState, ViewVariant } from "../lib/types";
   import { PROJECT_TIMING_OPTIONS } from "../lib/constants";
   import type { ProjectViewStore } from "../lib/stores/projectViewStore";
-  import { projectTimingStatuses as resolveProjectTimingStatuses } from "../lib/utils/inferredDates";
+  import {
+    matchesTimingFilterSelection,
+    projectTimingStatuses as resolveProjectTimingStatuses,
+  } from "../lib/utils/inferredDates";
   import ColumnPicker from "./shared/ColumnPicker.svelte";
   import SearchInput from "./shared/SearchInput.svelte";
   import SavedViewPicker from "./shared/SavedViewPicker.svelte";
@@ -66,7 +69,7 @@
 
     return state.projects.filter((project) => {
       const timing = projectTimingStatuses(project);
-      return timing.some((status) => selected.has(status as ProjectTimingFilterOption));
+      return matchesTimingFilterSelection(timing, selected);
     });
   });
 

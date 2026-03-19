@@ -30,6 +30,7 @@
   } from "../lib/constants";
   import type { ProjectViewStore } from "../lib/stores/projectViewStore";
   import {
+    matchesTimingFilterSelection,
     projectTimingStatuses as resolveProjectTimingStatuses,
     taskTimingStatuses as resolveTaskTimingStatuses,
   } from "../lib/utils/inferredDates";
@@ -112,7 +113,7 @@
 
     return state.projects.filter((project) => {
       const timing = projectTimingStatuses(project);
-      return timing.some((status) => selected.has(status));
+      return matchesTimingFilterSelection(timing, selected);
     });
   });
 
@@ -397,11 +398,7 @@
     }
 
     const timing = taskTimingStatuses(task);
-    if (timing.length === 0) {
-      return false;
-    }
-
-    return timing.some((status) => selectedTaskTimings().has(status));
+    return matchesTimingFilterSelection(timing, selectedTaskTimings());
   }
 
   function shouldShowTaskPriority(task: ProjectTask): boolean {
@@ -1834,7 +1831,30 @@
                       use:checkboxVisualState={task.state}
                       onclick={(event) => handleTaskCheckboxClick(event, task)}
                     />
-                    <span>{task.text}</span>
+                    <span>
+                      {#each parseCellSegments(task.text) as segment, index (`${task.id}:expanded:${index}`)}
+                        {#if segment.linkReference}
+                          <a
+                            href={encodeURI(segment.target ?? "")}
+                            class="opn-link"
+                            onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", task.projectPath)}
+                          >
+                            {segment.text}
+                          </a>
+                        {:else if segment.externalUrl}
+                          <a
+                            href={segment.externalUrl}
+                            class="opn-link"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {segment.text}
+                          </a>
+                        {:else}
+                          {segment.text}
+                        {/if}
+                      {/each}
+                    </span>
                   </li>
                 {/each}
               </ul>

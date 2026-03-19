@@ -164,6 +164,14 @@ function isTerminalProjectStatus(status: string | undefined): boolean {
   return normalized === "done" || normalized === "cancelled" || normalized === "canceled";
 }
 
+function isDoingProjectStatus(status: string | undefined): boolean {
+  return (status ?? "").trim().toLowerCase() === "doing";
+}
+
+function isCurrentDateWindow(scheduledDate: string | null, dueDate: string | null, today: string): boolean {
+  return scheduledDate !== null && dueDate !== null && scheduledDate <= today && today <= dueDate;
+}
+
 function localIsoDate(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -186,9 +194,8 @@ export function projectTimingStatuses(project: ProjectNote): ProjectTimingFilter
   const scheduledDate = project.resolvedDates.scheduled.value;
   const startDate = project.resolvedDates.start.value;
   const dueDate = project.resolvedDates.due.value;
-  const hasStartedByToday = (scheduledDate !== null && scheduledDate <= today) || (startDate !== null && startDate <= today);
 
-  if (!terminalStatus && dueDate && hasStartedByToday && today <= dueDate) {
+  if (!terminalStatus && (isDoingProjectStatus(project.status) || isCurrentDateWindow(scheduledDate, dueDate, today))) {
     timing.push("Current");
   }
 
@@ -216,7 +223,7 @@ export function projectTimingStatuses(project: ProjectNote): ProjectTimingFilter
     timing.push("Future");
   }
 
-  if (!terminalStatus && (!scheduledDate || !startDate || !dueDate)) {
+  if (!terminalStatus && !scheduledDate && !startDate && !dueDate) {
     timing.push("Needs Timing");
   }
 
@@ -233,9 +240,8 @@ export function taskTimingStatuses(
   const scheduledDate = task.resolvedDates.scheduled.value;
   const startDate = task.resolvedDates.start.value;
   const dueDate = task.resolvedDates.due.value;
-  const hasStartedByToday = (scheduledDate !== null && scheduledDate <= today) || (startDate !== null && startDate <= today);
 
-  if (!task.checked && !isTerminalProjectStatus(projectStatus) && dueDate && hasStartedByToday && today <= dueDate) {
+  if (!task.checked && !isTerminalProjectStatus(projectStatus) && (task.state === "in-progress" || isCurrentDateWindow(scheduledDate, dueDate, today))) {
     timing.push("Current");
   }
 
@@ -263,9 +269,20 @@ export function taskTimingStatuses(
     timing.push("Future");
   }
 
-  if (!scheduledDate || !startDate || !dueDate) {
+  if (!scheduledDate && !startDate && !dueDate) {
     timing.push("Needs Timing");
   }
 
   return timing;
+}
+
+export function matchesTimingFilterSelection(
+  timing: readonly TaskTimingFilterOption[],
+  selected: ReadonlySet<TaskTimingFilterOption>,
+): boolean {
+  if (timing.length === 0) {
+    return selected.has("Blank");
+  }
+
+  return timing.some((status) => selected.has(status));
 }
