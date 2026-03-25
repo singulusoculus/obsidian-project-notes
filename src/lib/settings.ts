@@ -80,6 +80,26 @@ function normalizeStringListRecord(value: unknown): Record<string, string[]> {
   return normalized;
 }
 
+function normalizeNestedStringListRecord(value: unknown): Record<string, Record<string, string[]>> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const normalized: Record<string, Record<string, string[]>> = {};
+  for (const [outerKey, candidate] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof outerKey !== "string" || outerKey.trim().length === 0) {
+      continue;
+    }
+
+    const nested = normalizeStringListRecord(candidate);
+    if (Object.keys(nested).length > 0) {
+      normalized[outerKey] = nested;
+    }
+  }
+
+  return normalized;
+}
+
 function normalizeSavedProjectsViews(value: unknown): SavedProjectsView[] {
   if (!Array.isArray(value)) {
     return [];
@@ -424,6 +444,7 @@ export function parseSettings(data: Partial<ProjectSettings> | undefined): Proje
     priorities: normalizeList(data?.priorities, DEFAULT_SETTINGS.priorities),
     defaultProperties: normalizePropertyTemplateList(data?.defaultProperties, DEFAULT_SETTINGS.defaultProperties),
     gridColumnsByArea: normalizeGridColumnsByArea(data?.gridColumnsByArea),
+    kanbanProjectOrderByArea: normalizeNestedStringListRecord(data?.kanbanProjectOrderByArea),
     kanbanCardDefaultFieldIds: normalizeKanbanCardFieldIds(data?.kanbanCardDefaultFieldIds, defaultKanbanCardFieldIds),
     kanbanCardFieldsByArea: normalizeStringListRecord(data?.kanbanCardFieldsByArea),
     kanbanCardDefaultNextTaskCount: normalizePositiveInteger(

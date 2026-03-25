@@ -21,6 +21,7 @@
   }
 
   type LinkMatchType = "wiki" | "markdown-external" | "external-url";
+  type DropIndicatorPosition = "before" | "after";
 
   const TASK_DATE_TOKEN_REGEX = /(?:⏳|🛫|📅|✅)\s*\d{4}-\d{2}-\d{2}/gu;
   const WIKI_LINK_REGEX = /\[\[([^\]]+)\]\]/gu;
@@ -38,6 +39,9 @@
   const state = $derived.by(() => fromStore(viewStore.state).current);
 
   let draggingPath = $state<string | null>(null);
+  let dropIndicatorStatus = $state<string | null>(null);
+  let dropIndicatorPath = $state<string | null>(null);
+  let dropIndicatorPosition = $state<DropIndicatorPosition>("after");
   let expandedNotesByPath = $state<Record<string, boolean>>({});
   let notesLineOverflowByPath = $state<Record<string, boolean>>({});
   let completingTaskIds = $state<string[]>([]);
@@ -91,6 +95,27 @@
         map.set(status, []);
       }
       map.get(status)?.push(project);
+    }
+
+    for (const [status, projects] of map.entries()) {
+      const orderByPath = new Map((state.kanbanProjectOrderByStatus[status] ?? []).map((path, index) => [path, index]));
+      projects.sort((left, right) => {
+        const leftIndex = orderByPath.get(left.path) ?? Number.MAX_SAFE_INTEGER;
+        const rightIndex = orderByPath.get(right.path) ?? Number.MAX_SAFE_INTEGER;
+        return leftIndex - rightIndex;
+      });
+    }
+
+    return map;
+  });
+
+  const projectPathsByStatus = $derived.by(() => {
+    const map = new Map<string, string[]>();
+    for (const status of orderedStatuses) {
+      map.set(
+        status,
+        (projectsByStatus.get(status) ?? []).map((project) => project.path),
+      );
     }
 
     return map;
@@ -162,6 +187,12 @@
     event.preventDefault();
   }
 
+  function clearDropIndicator(): void {
+    dropIndicatorStatus = null;
+    dropIndicatorPath = null;
+    dropIndicatorPosition = "after";
+  }
+
   function cleanupDragImage(): void {
     dragImageElement?.remove();
     dragImageElement = null;
@@ -187,6 +218,7 @@
 
   function handleDragStart(event: DragEvent, path: string): void {
     draggingPath = path;
+    clearDropIndicator();
     event.dataTransfer?.setData("text/project-path", path);
     event.dataTransfer?.setData("text/plain", path);
     event.dataTransfer?.setData("application/x-project-path", path);
@@ -213,28 +245,126 @@
 
   function handleDragEnd(): void {
     draggingPath = null;
+    clearDropIndicator();
     cleanupDragImage();
   }
 
-  function handleDrop(event: DragEvent, status: string): void {
-    event.preventDefault();
-    const droppedPath =
+  function resolveDraggedPath(event: DragEvent): string | null {
+    return (
       event.dataTransfer?.getData("text/project-path") ||
       event.dataTransfer?.getData("application/x-project-path") ||
-      draggingPath;
+      draggingPath
+    );
+  }
 
-    if (!droppedPath) {
-      return;
+  function setDropIndicator(status: string, path: string | null, position: DropIndicatorPosition): void {
+    dropIndicatorStatus = status;
+    dropIndicatorPath = path;
+    dropIndicatorPosition = position;
+  }
+
+  function resolveLaneDropIndicator(container: HTMLElement, pointerY: number): { path: string | null; position: DropIndicatorPosition } {
+    const cards = Array.from(container.querySelectorAll<HTMLElement>(".opn-kanban-card[data-project-path]")).filter(
+      (card) => card.dataset.projectPath && card.dataset.projectPath !== draggingPath,
+    );
+
+    for (const card of cards) {
+      const path = card.dataset.projectPath;
+      if (!path) {
+        continue;
+      }
+
+      const rect = card.getBoundingClientRect();
+      if (pointerY < rect.top + rect.height / 2) {
+        return { path, position: "before" };
+      }
     }
 
-    void viewStore.updateProject({
+    const lastCard = cards[cards.length - 1];
+    return {
+      path: lastCard?.dataset.projectPath ?? null,
+      position: "after",
+    };
+  }
+
+  function buildVisibleOrder(
+    paths: string[],
+    draggedPath: string,
+    targetPath: string | null,
+    position: DropIndicatorPosition,
+  ): string[] {
+    const next = paths.filter((path) => path !== draggedPath);
+    if (!targetPath) {
+      return [...next, draggedPath];
+    }
+
+    const index = next.indexOf(targetPath);
+    if (index < 0) {
+      return [...next, draggedPath];
+    }
+
+    const insertionIndex = position === "before" ? index : index + 1;
+    return [...next.slice(0, insertionIndex), draggedPath, ...next.slice(insertionIndex)];
+  }
+
+  function moveDraggedProject(
+    droppedPath: string,
+    sourceStatus: string,
+    targetStatus: string,
+    targetVisiblePaths: string[],
+  ): void {
+    const sourceVisiblePaths = projectPathsByStatus.get(sourceStatus) ?? [];
+
+    void viewStore.moveKanbanProject({
       path: droppedPath,
-      key: "status",
-      value: status,
+      sourceStatus,
+      targetStatus,
+      sourceVisiblePaths: sourceStatus === targetStatus ? targetVisiblePaths : sourceVisiblePaths.filter((path) => path !== droppedPath),
+      targetVisiblePaths,
     });
 
     draggingPath = null;
+    clearDropIndicator();
     cleanupDragImage();
+  }
+
+  function handleLaneDragOver(event: DragEvent, status: string): void {
+    allowDrop(event);
+    const currentTarget = event.currentTarget;
+    if (!(currentTarget instanceof HTMLElement) || !draggingPath) {
+      return;
+    }
+
+    const indicator = resolveLaneDropIndicator(currentTarget, event.clientY);
+    setDropIndicator(status, indicator.path, indicator.position);
+  }
+
+  function handleLaneDrop(event: DragEvent, status: string): void {
+    event.preventDefault();
+    const droppedPath = resolveDraggedPath(event);
+    const sourceStatus = droppedPath ? state.projectStatusByPath[droppedPath] : null;
+
+    if (!droppedPath || !sourceStatus) {
+      return;
+    }
+
+    const targetPath = dropIndicatorStatus === status ? dropIndicatorPath : null;
+    const targetPosition = dropIndicatorStatus === status ? dropIndicatorPosition : "after";
+    const targetVisiblePaths = buildVisibleOrder(projectPathsByStatus.get(status) ?? [], droppedPath, targetPath, targetPosition);
+    moveDraggedProject(droppedPath, sourceStatus, status, targetVisiblePaths);
+  }
+
+  function handleHiddenLaneDrop(event: DragEvent, status: string): void {
+    event.preventDefault();
+    const droppedPath = resolveDraggedPath(event);
+    const sourceStatus = droppedPath ? state.projectStatusByPath[droppedPath] : null;
+
+    if (!droppedPath || !sourceStatus) {
+      return;
+    }
+
+    const targetVisiblePaths = buildVisibleOrder(projectPathsByStatus.get(status) ?? [], droppedPath, null, "after");
+    moveDraggedProject(droppedPath, sourceStatus, status, targetVisiblePaths);
   }
 
   function handleProjectLinkClick(event: MouseEvent, path: string): void {
@@ -852,11 +982,7 @@
     <div class="opn-kanban-columns" role="region">
       {#each visibleStatuses as status (status)}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <section
-          class="opn-kanban-column"
-          ondragover={allowDrop}
-          ondrop={(event) => handleDrop(event, status)}
-        >
+        <section class="opn-kanban-column">
           <header>
             <div class="opn-kanban-column-title">
               <h3>{status}</h3>
@@ -871,10 +997,17 @@
             <span>{projectsByStatus.get(status)?.length ?? 0}</span>
           </header>
 
-          <div class="opn-kanban-cards">
+          <div
+            class="opn-kanban-cards"
+            ondragover={(event) => handleLaneDragOver(event, status)}
+            ondrop={(event) => handleLaneDrop(event, status)}
+          >
             {#each projectsByStatus.get(status) ?? [] as project (project.path)}
               <article
                 class="opn-kanban-card"
+                class:is-drop-before={dropIndicatorStatus === status && dropIndicatorPath === project.path && dropIndicatorPosition === "before"}
+                class:is-drop-after={dropIndicatorStatus === status && dropIndicatorPath === project.path && dropIndicatorPosition === "after"}
+                data-project-path={project.path}
                 draggable="true"
                 ondragstart={(event) => handleDragStart(event, project.path)}
                 ondragend={handleDragEnd}
@@ -1103,6 +1236,10 @@
                 {/if}
               </article>
             {/each}
+
+            {#if dropIndicatorStatus === status && dropIndicatorPath === null}
+              <div class="opn-kanban-drop-indicator" aria-hidden="true"></div>
+            {/if}
           </div>
         </section>
       {/each}
@@ -1116,7 +1253,7 @@
             class="opn-kanban-dropzone"
             role="region"
             ondragover={allowDrop}
-            ondrop={(event) => handleDrop(event, status)}
+            ondrop={(event) => handleHiddenLaneDrop(event, status)}
           >
             <strong>{status} ({hiddenCount})</strong>
             <span>Drop here</span>

@@ -99,6 +99,7 @@ export const DEFAULT_SETTINGS: ProjectSettings = {
   priorities: DEFAULT_PRIORITIES,
   defaultProperties: DEFAULT_PROJECT_PROPERTIES,
   gridColumnsByArea: {},
+  kanbanProjectOrderByArea: {},
   kanbanCardDefaultFieldIds: [...DEFAULT_KANBAN_CARD_FIELD_IDS],
   kanbanCardFieldsByArea: {},
   kanbanCardDefaultNextTaskCount: 1,

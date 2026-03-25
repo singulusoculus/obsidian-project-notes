@@ -17,6 +17,20 @@ export class ProjectNormalizer {
     return this.inFlight.has(path);
   }
 
+  async addMissingProperties(file: TFile, area: AreaConfig): Promise<boolean> {
+    if (this.inFlight.has(file.path)) {
+      return false;
+    }
+
+    this.inFlight.add(file.path);
+
+    try {
+      return await this.addMissingPropertiesInternal(file, area);
+    } finally {
+      this.inFlight.delete(file.path);
+    }
+  }
+
   async normalizeFile(file: TFile, area: AreaConfig): Promise<boolean> {
     if (this.inFlight.has(file.path)) {
       return false;
@@ -25,38 +39,48 @@ export class ProjectNormalizer {
     this.inFlight.add(file.path);
 
     try {
-      const templates = resolveAreaPropertyTemplates(this.getSettings(), area);
-      let frontmatterChanged = false;
-      await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
-        const existingNames = new Set<string>(
-          Object.keys(frontmatter).map((name) => canonicalPropertyName(name)),
-        );
-
-        for (const template of templates) {
-          const key = canonicalPropertyName(template.name);
-          if (existingNames.has(key)) {
-            continue;
-          }
-
-          frontmatter[template.name] = resolvePropertyDefaultValue(template, area, file);
-          existingNames.add(key);
-          frontmatterChanged = true;
-        }
-      });
-
-      const content = await this.app.vault.cachedRead(file);
-      const { frontmatter, body } = splitFrontmatter(content);
-      const normalizedBody = this.normalizeSections(body);
-
-      if (normalizedBody !== body) {
-        await this.app.vault.modify(file, `${frontmatter}${normalizedBody}`);
-        return true;
-      }
-
-      return frontmatterChanged;
+      const frontmatterChanged = await this.addMissingPropertiesInternal(file, area);
+      const sectionsChanged = await this.addMissingSectionsInternal(file);
+      return frontmatterChanged || sectionsChanged;
     } finally {
       this.inFlight.delete(file.path);
     }
+  }
+
+  private async addMissingPropertiesInternal(file: TFile, area: AreaConfig): Promise<boolean> {
+    const templates = resolveAreaPropertyTemplates(this.getSettings(), area);
+    let frontmatterChanged = false;
+    await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+      const existingNames = new Set<string>(
+        Object.keys(frontmatter).map((name) => canonicalPropertyName(name)),
+      );
+
+      for (const template of templates) {
+        const key = canonicalPropertyName(template.name);
+        if (existingNames.has(key)) {
+          continue;
+        }
+
+        frontmatter[template.name] = resolvePropertyDefaultValue(template, area, file);
+        existingNames.add(key);
+        frontmatterChanged = true;
+      }
+    });
+
+    return frontmatterChanged;
+  }
+
+  private async addMissingSectionsInternal(file: TFile): Promise<boolean> {
+    const content = await this.app.vault.cachedRead(file);
+    const { frontmatter, body } = splitFrontmatter(content);
+    const normalizedBody = this.normalizeSections(body);
+
+    if (normalizedBody === body) {
+      return false;
+    }
+
+    await this.app.vault.modify(file, `${frontmatter}${normalizedBody}`);
+    return true;
   }
 
   private normalizeSections(body: string): string {

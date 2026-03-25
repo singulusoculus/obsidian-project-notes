@@ -57,6 +57,7 @@ export class ProjectIndexService {
   private readonly normalizer: ProjectNormalizer;
   private readonly taskParser: TaskParser;
   private readonly onDirty: () => void;
+  private readonly onPluginWrite: (path: string) => void;
 
   private readonly projectsByPath = new Map<string, ProjectNote>();
   private readonly tasksById = new Map<string, ProjectTask>();
@@ -68,12 +69,14 @@ export class ProjectIndexService {
     normalizer: ProjectNormalizer,
     taskParser: TaskParser,
     onDirty: () => void,
+    onPluginWrite: (path: string) => void,
   ) {
     this.app = app;
     this.getSettings = getSettings;
     this.normalizer = normalizer;
     this.taskParser = taskParser;
     this.onDirty = onDirty;
+    this.onPluginWrite = onPluginWrite;
   }
 
   async initialize(snapshot?: ProjectIndexSnapshot): Promise<void> {
@@ -85,7 +88,7 @@ export class ProjectIndexService {
       this.notify();
     }
 
-    await this.reconcileAllAreas({ normalize: true });
+    await this.reconcileAllAreas({ normalize: false });
   }
 
   subscribe(listener: () => void): () => void {
@@ -175,7 +178,7 @@ export class ProjectIndexService {
       this.projectsByPath.delete(oldPath);
     }
 
-    const changed = await this.handleFileChange(file, { normalize: true, syncTaskCompletionMarkers: true });
+    const changed = await this.handleFileChange(file, { normalize: false, syncTaskCompletionMarkers: true });
     if (changed || oldPath !== file.path) {
       this.rebuildTaskIndex();
       this.notifyAndPersist();
@@ -349,6 +352,7 @@ export class ProjectIndexService {
       return false;
     }
 
+    this.onPluginWrite(abstractFile.path);
     const area = this.resolveArea(abstractFile.path);
     const normalizedValue = update.value.trim();
 
@@ -384,6 +388,7 @@ export class ProjectIndexService {
       return false;
     }
 
+    this.onPluginWrite(abstractFile.path);
     const changed = await this.taskParser.updateTaskDate(abstractFile, task, request.field, request.value);
     if (!changed) {
       return false;
@@ -409,6 +414,7 @@ export class ProjectIndexService {
       return false;
     }
 
+    this.onPluginWrite(abstractFile.path);
     const changed = await this.taskParser.setTaskState(abstractFile, task, request.state);
     if (!changed) {
       return false;
@@ -434,8 +440,7 @@ export class ProjectIndexService {
       return false;
     }
 
-    await this.normalizer.normalizeFile(abstractFile, area);
-
+    this.onPluginWrite(abstractFile.path);
     const changed = await this.taskParser.addTask(abstractFile, request);
     if (!changed) {
       return false;
@@ -448,6 +453,58 @@ export class ProjectIndexService {
     }
 
     return refreshed;
+  }
+
+  async addMissingPropertiesToFile(file: TFile): Promise<boolean | null> {
+    const area = this.resolveArea(file.path);
+    if (!area) {
+      return null;
+    }
+
+    this.onPluginWrite(file.path);
+    const changed = await this.normalizer.addMissingProperties(file, area);
+    if (!changed) {
+      return false;
+    }
+
+    const refreshed = await this.handleFileChange(file, { normalize: false, syncTaskCompletionMarkers: false });
+    if (refreshed) {
+      this.rebuildTaskIndex();
+      this.notifyAndPersist();
+    }
+
+    return true;
+  }
+
+  async backfillMissingProperties(): Promise<number> {
+    let changedCount = 0;
+    let indexChanged = false;
+
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      const area = this.resolveArea(file.path);
+      if (!area) {
+        continue;
+      }
+
+      this.onPluginWrite(file.path);
+      const changed = await this.normalizer.addMissingProperties(file, area);
+      if (!changed) {
+        continue;
+      }
+
+      changedCount += 1;
+      const refreshed = await this.handleFileChange(file, { normalize: false, syncTaskCompletionMarkers: false });
+      if (refreshed) {
+        indexChanged = true;
+      }
+    }
+
+    if (indexChanged) {
+      this.rebuildTaskIndex();
+      this.notifyAndPersist();
+    }
+
+    return changedCount;
   }
 
   createSnapshot(): ProjectIndexSnapshot {

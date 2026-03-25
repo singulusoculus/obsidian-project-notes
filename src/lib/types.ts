@@ -121,6 +121,7 @@ export interface ProjectSettings {
   priorities: string[];
   defaultProperties: ProjectPropertyTemplate[];
   gridColumnsByArea: Record<string, string[]>;
+  kanbanProjectOrderByArea: Record<string, Record<string, string[]>>;
   kanbanCardDefaultFieldIds: string[];
   kanbanCardFieldsByArea: Record<string, string[]>;
   kanbanCardDefaultNextTaskCount: number;
@@ -311,6 +312,7 @@ export interface ProjectViewState {
   kanbanCardFields: KanbanCardField[];
   kanbanNextTaskCount: number;
   kanbanStatusOrder: string[];
+  kanbanProjectOrderByStatus: Record<string, string[]>;
   kanbanTimingFilter: ProjectTimingFilterOption[];
   kanbanNotesPreviewWords: number;
   kanbanNotesPreviewLines: number;

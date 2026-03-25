@@ -113,6 +113,9 @@ const LEGACY_VIEW_DEFINITIONS: ViewDefinition[] = [
 
 const ALL_VIEW_DEFINITIONS = [...PRIMARY_VIEW_DEFINITIONS, ...LEGACY_VIEW_DEFINITIONS];
 const IN_PROGRESS_TASK_LINE_REGEX = /^\s*[-*+]\s+\[\/\]\s*/;
+const NOTE_CHANGE_DEBOUNCE_MS = 1000;
+const VIEW_UPDATE_IMMEDIATE_EVENT_BUDGET = 2;
+const VIEW_UPDATE_IMMEDIATE_TTL_MS = 1500;
 const RESERVED_KANBAN_CARD_PROPERTY_KEYS = new Set<string>([
   "aliases",
   "status",
@@ -1114,9 +1117,8 @@ class ProjectNotesSettingTab extends PluginSettingTab {
   }
 
   private renderPropertiesSettings(containerEl: HTMLElement): void {
-    
     containerEl.createEl("p", {
-      text: "Define default properties auto-added to new/normalized project notes. Missing properties are added; existing values are preserved.",
+      text: "Define default properties auto-added to newly created project notes. Existing notes keep their current property set unless you run an add-missing-properties command.",
     });
 
     const tokenListEl = containerEl.createDiv();
@@ -1359,6 +1361,7 @@ class ProjectNotesSettingTab extends PluginSettingTab {
             .onClick(async () => {
               this.plugin.settings.areas = this.plugin.settings.areas.filter((candidate) => candidate.id !== area.id);
               delete this.plugin.settings.gridColumnsByArea[area.id];
+              delete this.plugin.settings.kanbanProjectOrderByArea[area.id];
               delete this.plugin.settings.kanbanCardFieldsByArea[area.id];
               delete this.plugin.settings.kanbanCardNextTaskCountByArea[area.id];
               await this.plugin.saveSettings();
@@ -1734,6 +1737,7 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
     priorities: [...DEFAULT_SETTINGS.priorities],
     defaultProperties: DEFAULT_SETTINGS.defaultProperties.map((property) => ({ ...property })),
     gridColumnsByArea: { ...DEFAULT_SETTINGS.gridColumnsByArea },
+    kanbanProjectOrderByArea: { ...DEFAULT_SETTINGS.kanbanProjectOrderByArea },
     kanbanCardDefaultFieldIds: [...DEFAULT_SETTINGS.kanbanCardDefaultFieldIds],
     kanbanCardFieldsByArea: { ...DEFAULT_SETTINGS.kanbanCardFieldsByArea },
     kanbanCardDefaultNextTaskCount: DEFAULT_SETTINGS.kanbanCardDefaultNextTaskCount,
@@ -1758,6 +1762,10 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
   private intervalId: number | null = null;
   private readonly editorSyncInFlight = new Set<string>();
   private readonly previousEditorContentByPath = new Map<string, string>();
+  private readonly debouncedFileChangeTimers = new Map<string, number>();
+  private readonly debouncedFileChangeFiles = new Map<string, TFile>();
+  private readonly debouncedMetadataChangePaths = new Set<string>();
+  private readonly immediateFileRefreshes = new Map<string, { remainingEvents: number; expiresAt: number }>();
 
   async onload(): Promise<void> {
     const persisted = parsePersistedData(await this.loadData());
@@ -1776,6 +1784,7 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
       this.normalizer,
       this.taskParser,
       () => this.schedulePersist(),
+      (path) => this.markImmediateFileRefresh(path),
     );
 
     await this.indexService.initialize(persisted.snapshot);
@@ -1818,6 +1827,14 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
       window.clearInterval(this.intervalId);
       this.intervalId = null;
     }
+
+    for (const timer of this.debouncedFileChangeTimers.values()) {
+      window.clearTimeout(timer);
+    }
+    this.debouncedFileChangeTimers.clear();
+    this.debouncedFileChangeFiles.clear();
+    this.debouncedMetadataChangePaths.clear();
+    this.immediateFileRefreshes.clear();
   }
 
   async saveSettings(
@@ -1928,13 +1945,21 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
       id: "rebuild-project-index",
       name: "Rebuild Project Notes Index",
       callback: () => {
-        void this.indexService.reconcileAllAreas({ normalize: true });
+        void this.indexService.reconcileAllAreas({ normalize: false });
+      },
+    });
+
+    this.addCommand({
+      id: "add-missing-properties-to-current-note",
+      name: "Add Missing Properties to Current Note",
+      callback: () => {
+        void this.addMissingPropertiesToCurrentNote();
       },
     });
 
     this.addCommand({
       id: "backfill-missing-project-properties",
-      name: "Backfill Missing Projet Properties",
+      name: "Backfill Missing Project Properties",
       callback: () => {
         void this.backfillMissingProperties();
       },
@@ -1958,7 +1983,13 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
           return;
         }
 
-        void this.indexService.onFileModified(file);
+        if (this.consumeImmediateFileRefresh(file.path)) {
+          this.clearDebouncedFileRefresh(file.path);
+          void this.indexService.onFileModified(file);
+          return;
+        }
+
+        this.scheduleDebouncedFileRefresh(file, "modify");
       }),
     );
 
@@ -1968,6 +1999,8 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
           return;
         }
 
+        this.clearDebouncedFileRefresh(oldPath);
+        this.clearDebouncedFileRefresh(file.path);
         void this.indexService.onFileRenamed(file, oldPath);
       }),
     );
@@ -1978,6 +2011,7 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
           return;
         }
 
+        this.clearDebouncedFileRefresh(file.path);
         this.indexService.onFileDeleted(file.path);
       }),
     );
@@ -1988,9 +2022,89 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
           return;
         }
 
-        void this.indexService.onFileMetadataChanged(file);
+        if (this.consumeImmediateFileRefresh(file.path)) {
+          this.clearDebouncedFileRefresh(file.path);
+          void this.indexService.onFileMetadataChanged(file);
+          return;
+        }
+
+        this.scheduleDebouncedFileRefresh(file, "metadata");
       }),
     );
+  }
+
+  private scheduleDebouncedFileRefresh(file: TFile, source: "modify" | "metadata"): void {
+    const path = file.path;
+    this.debouncedFileChangeFiles.set(path, file);
+    if (source === "metadata") {
+      this.debouncedMetadataChangePaths.add(path);
+    }
+
+    const existingTimer = this.debouncedFileChangeTimers.get(path);
+    if (existingTimer !== undefined) {
+      window.clearTimeout(existingTimer);
+    }
+
+    const timer = window.setTimeout(() => {
+      const pendingFile = this.debouncedFileChangeFiles.get(path);
+      const hasMetadataChange = this.debouncedMetadataChangePaths.has(path);
+      this.debouncedFileChangeTimers.delete(path);
+      this.debouncedFileChangeFiles.delete(path);
+      this.debouncedMetadataChangePaths.delete(path);
+      if (!pendingFile) {
+        return;
+      }
+
+      if (hasMetadataChange) {
+        void this.indexService.onFileMetadataChanged(pendingFile);
+        return;
+      }
+
+      void this.indexService.onFileModified(pendingFile);
+    }, NOTE_CHANGE_DEBOUNCE_MS);
+
+    this.debouncedFileChangeTimers.set(path, timer);
+  }
+
+  private clearDebouncedFileRefresh(path: string): void {
+    const timer = this.debouncedFileChangeTimers.get(path);
+    if (timer !== undefined) {
+      window.clearTimeout(timer);
+      this.debouncedFileChangeTimers.delete(path);
+    }
+
+    this.debouncedFileChangeFiles.delete(path);
+    this.debouncedMetadataChangePaths.delete(path);
+  }
+
+  private markImmediateFileRefresh(path: string): void {
+    this.immediateFileRefreshes.set(path, {
+      remainingEvents: VIEW_UPDATE_IMMEDIATE_EVENT_BUDGET,
+      expiresAt: Date.now() + VIEW_UPDATE_IMMEDIATE_TTL_MS,
+    });
+  }
+
+  private consumeImmediateFileRefresh(path: string): boolean {
+    const pending = this.immediateFileRefreshes.get(path);
+    if (!pending) {
+      return false;
+    }
+
+    if (pending.expiresAt < Date.now()) {
+      this.immediateFileRefreshes.delete(path);
+      return false;
+    }
+
+    if (pending.remainingEvents <= 1) {
+      this.immediateFileRefreshes.delete(path);
+      return true;
+    }
+
+    this.immediateFileRefreshes.set(path, {
+      remainingEvents: pending.remainingEvents - 1,
+      expiresAt: pending.expiresAt,
+    });
+    return true;
   }
 
   private registerEditorEvents(): void {
@@ -2124,7 +2238,7 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
 
     this.reconcileTimer = window.setTimeout(() => {
       this.reconcileTimer = null;
-      void this.indexService.reconcileAllAreas({ normalize: true });
+      void this.indexService.reconcileAllAreas({ normalize: false });
     }, 1000);
   }
 
@@ -2268,8 +2382,35 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
 
   private async backfillMissingProperties(): Promise<void> {
     new Notice("Backfilling missing project properties...");
-    await this.indexService.reconcileAllAreas({ normalize: true });
-    new Notice("Backfill complete.");
+    const changedCount = await this.indexService.backfillMissingProperties();
+    if (changedCount === 0) {
+      new Notice("No missing project properties found.");
+      return;
+    }
+
+    const suffix = changedCount === 1 ? "" : "s";
+    new Notice(`Backfilled missing properties in ${changedCount} note${suffix}.`);
+  }
+
+  private async addMissingPropertiesToCurrentNote(): Promise<void> {
+    const file = this.app.workspace.getActiveFile();
+    if (!file || file.extension !== "md") {
+      new Notice("Open a markdown note first.");
+      return;
+    }
+
+    const changed = await this.indexService.addMissingPropertiesToFile(file);
+    if (changed === null) {
+      new Notice("Current note is not in a configured Area.");
+      return;
+    }
+
+    if (!changed) {
+      new Notice("Current note already has all configured properties.");
+      return;
+    }
+
+    new Notice("Added missing properties to current note.");
   }
 
   private async promptAreaSelection(): Promise<AreaConfig | null> {

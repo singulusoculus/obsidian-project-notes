@@ -86,7 +86,16 @@ interface AreaContext {
   availableKanbanCardFields: KanbanCardField[];
 }
 
+interface KanbanProjectMoveRequest {
+  path: string;
+  sourceStatus: string;
+  targetStatus: string;
+  sourceVisiblePaths: string[];
+  targetVisiblePaths: string[];
+}
+
 const TASK_TIMING_OPTION_VALUES: TaskTimingFilterOption[] = [...PROJECT_TIMING_OPTIONS];
+const GLOBAL_KANBAN_ORDER_AREA_KEY = "__all__";
 
 export class ProjectViewStore {
   readonly state: Writable<ProjectViewState>;
@@ -494,6 +503,65 @@ export class ProjectViewStore {
     this.openSettingsAction();
   }
 
+  async moveKanbanProject(request: KanbanProjectMoveRequest): Promise<void> {
+    const current = get(this.state);
+    const settings = this.getSettings();
+    const allAreaProjects = this.indexService.queryProjects({
+      areaId: current.currentAreaId,
+      sortBy: current.sortBy,
+      sortDirection: current.sortDirection,
+    });
+    const currentOrders = this.resolveKanbanProjectOrderByStatus(settings, current.currentAreaId, current.statuses, allAreaProjects);
+    const sourceBaseOrder = (currentOrders[request.sourceStatus] ?? []).filter((path) => path !== request.path);
+    const targetBaseOrder = (currentOrders[request.targetStatus] ?? []).filter((path) => path !== request.path);
+    const nextOrders: Record<string, string[]> = { ...currentOrders };
+
+    if (request.sourceStatus === request.targetStatus) {
+      nextOrders[request.targetStatus] = this.mergeVisibleKanbanOrder(targetBaseOrder, request.targetVisiblePaths);
+    } else {
+      nextOrders[request.sourceStatus] = this.mergeVisibleKanbanOrder(sourceBaseOrder, request.sourceVisiblePaths);
+      nextOrders[request.targetStatus] = this.mergeVisibleKanbanOrder(targetBaseOrder, request.targetVisiblePaths);
+    }
+
+    this.persistKanbanProjectOrder(settings, current.currentAreaId, nextOrders, [request.sourceStatus, request.targetStatus]);
+    this.state.update((state) => ({
+      ...state,
+      kanbanProjectOrderByStatus: nextOrders,
+      projectStatusByPath:
+        request.sourceStatus === request.targetStatus
+          ? state.projectStatusByPath
+          : { ...state.projectStatusByPath, [request.path]: request.targetStatus },
+      projects:
+        request.sourceStatus === request.targetStatus
+          ? state.projects
+          : state.projects.map((project) =>
+              project.path === request.path
+                ? {
+                    ...project,
+                    status: request.targetStatus,
+                    statusIsUnknown: !state.statuses.includes(request.targetStatus),
+                  }
+                : project,
+            ),
+    }));
+
+    if (request.sourceStatus !== request.targetStatus) {
+      const changed = await this.indexService.updateProjectMetadata({
+        path: request.path,
+        key: "status",
+        value: request.targetStatus,
+      });
+
+      if (!changed) {
+        this.persistKanbanProjectOrder(settings, current.currentAreaId, currentOrders, [request.sourceStatus, request.targetStatus]);
+        this.refresh();
+        return;
+      }
+    }
+
+    await this.persistSettings();
+  }
+
   async updateProject(update: ProjectMetadataUpdate): Promise<void> {
     await this.indexService.updateProjectMetadata(update);
   }
@@ -570,6 +638,7 @@ export class ProjectViewStore {
       ),
       kanbanNextTaskCount: resolveDefaultKanbanNextTaskCount(settings, context.areaId),
       kanbanStatusOrder: [...context.statuses],
+      kanbanProjectOrderByStatus: {},
       kanbanTimingFilter: [...PROJECT_TIMING_OPTIONS],
       kanbanNotesPreviewWords: settings.kanbanNotesPreviewWords,
       kanbanNotesPreviewLines: settings.kanbanNotesPreviewLines,
@@ -598,7 +667,17 @@ export class ProjectViewStore {
     const statuses = context.statuses;
     const priorities = context.priorities;
     const areaTagPrefix = context.area ? `area/${context.area.slug}` : null;
-    const allAreaProjects = this.indexService.queryProjects({ areaId: context.areaId });
+    const allAreaProjects = this.indexService.queryProjects({
+      areaId: context.areaId,
+      sortBy: current.sortBy,
+      sortDirection: current.sortDirection,
+    });
+    const kanbanProjectOrderByStatus = this.resolveKanbanProjectOrderByStatus(
+      settings,
+      context.areaId,
+      statuses,
+      allAreaProjects,
+    );
     const projectStatusByPath = allAreaProjects.reduce<Record<string, string>>((acc, project) => {
       acc[project.path] = project.status;
       return acc;
@@ -658,6 +737,7 @@ export class ProjectViewStore {
         current.kanbanCardFields.map((field) => field.id),
       ),
       kanbanStatusOrder: this.normalizeOrderedIds(current.kanbanStatusOrder, statuses),
+      kanbanProjectOrderByStatus,
       hiddenKanbanStatuses: Array.from(new Set(current.hiddenKanbanStatuses.filter((status) => statuses.includes(status)))),
       kanbanNotesPreviewWords: settings.kanbanNotesPreviewWords,
       kanbanNotesPreviewLines: settings.kanbanNotesPreviewLines,
@@ -927,6 +1007,74 @@ export class ProjectViewStore {
     }
 
     return boardType === "kanban" ? "kanban" : "projects";
+  }
+
+  private getKanbanProjectOrderAreaKey(areaId: string | null): string {
+    return areaId ?? GLOBAL_KANBAN_ORDER_AREA_KEY;
+  }
+
+  private resolveKanbanProjectOrderByStatus(
+    settings: ProjectSettings,
+    areaId: string | null,
+    statuses: string[],
+    projects: ProjectViewState["projects"],
+  ): Record<string, string[]> {
+    const storedByStatus = settings.kanbanProjectOrderByArea[this.getKanbanProjectOrderAreaKey(areaId)] ?? {};
+    const orderedStatuses = [...statuses];
+    const seenStatuses = new Set(orderedStatuses);
+    const pathsByStatus = new Map<string, string[]>();
+
+    for (const project of projects) {
+      if (!seenStatuses.has(project.status)) {
+        seenStatuses.add(project.status);
+        orderedStatuses.push(project.status);
+      }
+
+      const bucket = pathsByStatus.get(project.status) ?? [];
+      bucket.push(project.path);
+      pathsByStatus.set(project.status, bucket);
+    }
+
+    const resolved: Record<string, string[]> = {};
+    for (const status of orderedStatuses) {
+      const availablePaths = pathsByStatus.get(status) ?? [];
+      resolved[status] = this.normalizeOrderedIds(storedByStatus[status] ?? [], availablePaths);
+    }
+
+    return resolved;
+  }
+
+  private mergeVisibleKanbanOrder(baseOrder: string[], visibleOrder: string[]): string[] {
+    const normalizedVisibleOrder = Array.from(new Set(visibleOrder.filter((path) => path.length > 0)));
+    const visibleSet = new Set(normalizedVisibleOrder);
+    const hiddenOrder = baseOrder.filter((path) => !visibleSet.has(path));
+    return this.normalizeOrderedIds(normalizedVisibleOrder, [...normalizedVisibleOrder, ...hiddenOrder]);
+  }
+
+  private persistKanbanProjectOrder(
+    settings: ProjectSettings,
+    areaId: string | null,
+    orderByStatus: Record<string, string[]>,
+    statuses: string[],
+  ): void {
+    const areaKey = this.getKanbanProjectOrderAreaKey(areaId);
+    const nextAreaOrder = { ...(settings.kanbanProjectOrderByArea[areaKey] ?? {}) };
+
+    for (const status of statuses) {
+      const order = Array.from(new Set((orderByStatus[status] ?? []).filter((path) => path.length > 0)));
+      if (order.length > 0) {
+        nextAreaOrder[status] = order;
+      } else {
+        delete nextAreaOrder[status];
+      }
+    }
+
+    if (Object.keys(nextAreaOrder).length > 0) {
+      settings.kanbanProjectOrderByArea[areaKey] = nextAreaOrder;
+      return;
+    }
+
+    delete settings.kanbanProjectOrderByArea[areaKey];
   }
 
   private normalizeOrderedIds(ids: string[], availableIds: string[]): string[] {

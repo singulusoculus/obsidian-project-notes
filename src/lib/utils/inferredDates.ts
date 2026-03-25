@@ -191,6 +191,13 @@ export function projectTimingStatuses(project: ProjectNote): ProjectTimingFilter
   const today = relativeLocalIsoDate(0);
   const tomorrow = relativeLocalIsoDate(1);
   const terminalStatus = isTerminalProjectStatus(project.status) || Boolean(project.finishDate);
+  const hasOwnTimingDates = Boolean(project.scheduledDate || project.startDate || project.dueDate);
+  const hasIncompleteTasks = project.tasks.some((task) => !isTaskFinished(task));
+
+  if (project.inferDatesOverride === true && !hasOwnTimingDates && !hasIncompleteTasks) {
+    return timing;
+  }
+
   const scheduledDate = project.resolvedDates.scheduled.value;
   const startDate = project.resolvedDates.start.value;
   const dueDate = project.resolvedDates.due.value;

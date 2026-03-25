@@ -5,8 +5,8 @@ Project Notes is an Obsidian plugin for managing project notes inside Area folde
 ## What It Does
 
 - Treats one or more vault folders as Areas.
-- Normalizes notes inside those Areas so project notes have the same core properties and sections.
-- Parses tasks from each note's `## Tasks` section.
+- Initializes newly created project notes inside those Areas with the configured default properties and standard sections.
+- Parses tasks from notes that include a `## Tasks` section.
 - Surfaces the data in:
   - a Projects grid
   - a Tasks grid
@@ -33,7 +33,7 @@ Areas can also override:
 
 ### Project Notes
 
-Project notes remain plain Obsidian markdown files. The plugin normalizes notes that are created in, or moved into, an Area folder.
+Project notes remain plain Obsidian markdown files. When a note is created inside an Area folder, the plugin adds the configured default properties and standard sections. Existing notes are not automatically re-normalized later, so removed properties or sections stay removed unless you restore them yourself.
 
 Locked default properties:
 
@@ -65,7 +65,7 @@ Standard sections:
 - `## Notes`
 - `## Links`
 
-`## Tasks` is kept as the first heading section after any preamble.
+When those sections are created, `## Tasks` is kept as the first heading section after any preamble.
 
 ### Tasks
 
@@ -169,6 +169,7 @@ Task timing statuses:
 
 Timing rules use the resolved view dates shown by the plugin. `Scheduled` is treated as the planned start date. `Start` is treated as the actual start date.
 Timing filters on Projects, Tasks, and Kanban also include `Blank`, which matches items with no timing status.
+For projects with `opn-infer-dates` explicitly enabled on the note, if the note has no project-owned timing dates and no unfinished tasks remain, the project timing status is `Blank`.
 
 Projects:
 
@@ -241,9 +242,12 @@ Default project statuses include:
 - `Create Project Note`
 - `Create Project Note Task`
 - `Rebuild Project Notes Index`
-- `Backfill Missing Projet Properties`
+- `Add Missing Properties to Current Note`
+- `Backfill Missing Project Properties`
 
 `Open Project Notes` respects the startup-view setting. If startup view is `None`, it opens to Projects.
+`Rebuild Project Notes Index` refreshes the cache without modifying notes.
+The two add/backfill commands only restore missing properties; they do not recreate removed sections.
 
 ## Settings
 

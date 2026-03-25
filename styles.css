@@ -928,6 +928,33 @@ button.secondary {
   flex-direction: column;
   gap: 8px;
   min-width: 0;
+  position: relative;
+}
+
+.opn-kanban-card.is-drop-before::before,
+.opn-kanban-card.is-drop-after::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--interactive-accent);
+}
+
+.opn-kanban-card.is-drop-before::before {
+  top: -6px;
+}
+
+.opn-kanban-card.is-drop-after::after {
+  bottom: -6px;
+}
+
+.opn-kanban-drop-indicator {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--interactive-accent);
+  margin-top: -2px;
 }
 
 .opn-kanban-card-drag-image {
