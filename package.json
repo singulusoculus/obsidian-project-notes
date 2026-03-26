@@ -1,6 +1,6 @@
 {
   "name": "obsidian-project-notes",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "description": "Area-based project notes and task views for Obsidian",
   "main": "main.js",
   "scripts": {
