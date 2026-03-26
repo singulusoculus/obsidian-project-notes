@@ -917,6 +917,8 @@ button.secondary {
   gap: 8px;
   align-content: start;
   min-width: 0;
+  flex: 1 1 auto;
+  min-height: 96px;
 }
 
 .opn-kanban-card {
