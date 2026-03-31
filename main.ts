@@ -2313,8 +2313,15 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
       return;
     }
 
-    await this.ensureFolderExists(area.folderPath);
-    const file = await this.app.vault.create(path, "");
+    let file: TFile;
+    try {
+      await this.ensureFolderExists(area.folderPath);
+      file = await this.app.vault.create(path, "");
+    } catch (error) {
+      this.showCreateProjectNoteFailureNotice(normalizedFileName, error);
+      return;
+    }
+
     await this.indexService.onFileCreated(file);
 
     if (options.defaultStatus && options.defaultStatus.trim().length > 0) {
@@ -2445,6 +2452,33 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
       }
       await this.app.vault.createFolder(current);
     }
+  }
+
+  private showCreateProjectNoteFailureNotice(fileName: string, error: unknown): void {
+    if (this.isInvalidCreatePathError(error)) {
+      new Notice(`Could not create ${fileName}. The file or folder name contains invalid characters or is not allowed.`);
+      return;
+    }
+
+    new Notice(`Could not create ${fileName}.`);
+  }
+
+  private isInvalidCreatePathError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error ?? "").toLowerCase();
+
+    return (
+      message.includes("invalid character") ||
+      message.includes("invalid characters") ||
+      message.includes("illegal character") ||
+      message.includes("illegal characters") ||
+      message.includes("invalid file name") ||
+      message.includes("invalid folder name") ||
+      message.includes("invalid path") ||
+      message.includes("name is reserved") ||
+      (message.includes("not allowed") && (message.includes("name") || message.includes("path"))) ||
+      (message.includes("invalid") &&
+        (message.includes("name") || message.includes("path") || message.includes("character")))
+    );
   }
 
   private async ensureVaultPropertyTypes(): Promise<void> {

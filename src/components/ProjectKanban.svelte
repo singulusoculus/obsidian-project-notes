@@ -1111,7 +1111,30 @@
                                   use:checkboxVisualState={task.state}
                                   onclick={(event) => handleNextTaskCheckboxClick(event, task)}
                                 />
-                                <span>{getTaskDisplayText(task)}</span>
+                                <span>
+                                  {#each parseCellSegments(getTaskDisplayText(task)) as segment, index (`${task.id}:next:${index}`)}
+                                    {#if segment.linkReference}
+                                      <a
+                                        href={encodeURI(segment.target ?? "")}
+                                        class="opn-link"
+                                        onclick={(event) => handleCellLinkClick(event, segment.linkReference ?? "", task.projectPath)}
+                                      >
+                                        {segment.text}
+                                      </a>
+                                    {:else if segment.externalUrl}
+                                      <a
+                                        href={segment.externalUrl}
+                                        class="opn-link"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                      >
+                                        {segment.text}
+                                      </a>
+                                    {:else}
+                                      {segment.text}
+                                    {/if}
+                                  {/each}
+                                </span>
                               </li>
                             {/each}
                           </ul>
