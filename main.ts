@@ -1862,6 +1862,14 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
     this.schedulePersist();
   }
 
+  private async handleMarkdownFileRename(file: TFile, oldPath: string): Promise<void> {
+    if (oldPath !== file.path && this.remapKanbanProjectOrderPath(oldPath, file.path)) {
+      await this.saveSettings({ reconcile: false });
+    }
+
+    await this.indexService.onFileRenamed(file, oldPath);
+  }
+
   async promptSaveView(currentName: string): Promise<SavedViewPromptResult | null> {
     return new Promise((resolve) => {
       const modal = new SaveViewModal(this.app, currentName, resolve);
@@ -2001,7 +2009,7 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
 
         this.clearDebouncedFileRefresh(oldPath);
         this.clearDebouncedFileRefresh(file.path);
-        void this.indexService.onFileRenamed(file, oldPath);
+        void this.handleMarkdownFileRename(file, oldPath);
       }),
     );
 
@@ -2452,6 +2460,27 @@ export default class ObsidianProjectNotesPlugin extends Plugin {
       }
       await this.app.vault.createFolder(current);
     }
+  }
+
+  private remapKanbanProjectOrderPath(oldPath: string, newPath: string): boolean {
+    if (oldPath === newPath) {
+      return false;
+    }
+
+    let changed = false;
+
+    for (const orderByStatus of Object.values(this.settings.kanbanProjectOrderByArea)) {
+      for (const [status, paths] of Object.entries(orderByStatus)) {
+        if (!paths.includes(oldPath)) {
+          continue;
+        }
+
+        orderByStatus[status] = Array.from(new Set(paths.map((path) => (path === oldPath ? newPath : path))));
+        changed = true;
+      }
+    }
+
+    return changed;
   }
 
   private showCreateProjectNoteFailureNotice(fileName: string, error: unknown): void {
