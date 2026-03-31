@@ -88,6 +88,7 @@ When tri-state mode is enabled, task state cycles like this:
 `[ ] -> [/] -> [x] -> [ ]`
 
 Moving a task into `[/]` auto-adds today's `🛫` date if the task does not already have one.
+When a top-level task moves to `[x]`, the plugin moves that task and its nested subtree into a `### Done` subsection under `## Tasks`. Reopened tasks are moved back to the top of the active `## Tasks` list.
 
 ## Views
 

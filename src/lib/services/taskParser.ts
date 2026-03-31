@@ -15,6 +15,7 @@ import { isIsoDate, todayIsoDate } from "../utils/text";
 
 const CHECKBOX_REGEX = /^(\s*)[-*+]\s+\[( |x|X|\/)\]\s*(.*)$/;
 const TASKS_HEADING_REGEX = /^##\s+tasks\b.*$/i;
+const DONE_HEADING_REGEX = /^###\s+done\b.*$/i;
 const SCHEDULED_REGEX = /⏳\s*(\d{4}-\d{2}-\d{2})/u;
 const START_REGEX = /🛫\s*(\d{4}-\d{2}-\d{2})/u;
 const START_REGEX_GLOBAL = /🛫\s*(\d{4}-\d{2}-\d{2})/gu;
@@ -43,6 +44,19 @@ interface SimpleTaskMarkerChange {
   lineIndex: number;
   previousMatch: RegExpMatchArray;
   currentMatch: RegExpMatchArray;
+}
+
+interface TaskSectionNode {
+  start: number;
+  end: number;
+  indent: number;
+  state: TaskState;
+  parentIndex: number | null;
+}
+
+interface ExtractedTaskBlocks {
+  remainingLines: string[];
+  movedBlocks: string[][];
 }
 
 export class TaskParser {
@@ -116,40 +130,19 @@ export class TaskParser {
 
   async setTaskState(file: TFile, task: ProjectTask, state: TaskState): Promise<boolean> {
     const content = await this.app.vault.read(file);
-    const lines = content.split(/\r?\n/);
+    const updated = this.updateTaskContent(content, task, (match) => {
+      const indent = match[1];
+      const targetCheckmark = this.stateToMarker(state);
+      const text = this.normalizeTaskTextForState(match[3], state);
 
-    let lineIndex = task.line - 1;
-    if (lineIndex < 0 || lineIndex >= lines.length || !CHECKBOX_REGEX.test(lines[lineIndex])) {
-      lineIndex = lines.findIndex((line) => line === task.rawLine);
-    }
+      return `${indent}- [${targetCheckmark}] ${text}`;
+    });
 
-    if (lineIndex < 0 || lineIndex >= lines.length) {
+    if (!updated.changed) {
       return false;
     }
 
-    const currentLine = lines[lineIndex];
-    const match = currentLine.match(CHECKBOX_REGEX);
-    if (!match) {
-      return false;
-    }
-
-    const indent = match[1];
-    let text = match[3];
-    const targetCheckmark = this.stateToMarker(state);
-
-    if (state === "checked") {
-      if (!FINISHED_REGEX.test(text)) {
-        text = `${text} ${TASK_FINISHED_EMOJI} ${todayIsoDate()}`.trim();
-      }
-    } else if (state === "in-progress") {
-      text = this.ensureStartDateMarker(this.removeFinishedDateMarkers(text));
-    } else {
-      text = text.replace(/\s*✅\s*\d{4}-\d{2}-\d{2}/u, "").trim();
-    }
-
-    lines[lineIndex] = `${indent}- [${targetCheckmark}] ${text}`;
-
-    await this.app.vault.modify(file, lines.join("\n"));
+    await this.app.vault.modify(file, updated.content);
     return true;
   }
 
@@ -159,29 +152,17 @@ export class TaskParser {
     }
 
     const content = await this.app.vault.read(file);
-    const lines = content.split(/\r?\n/);
+    const updated = this.updateTaskContent(content, task, (match) => {
+      const indent = match[1];
+      const rebuilt = this.rebuildTaskTextWithDateUpdate(match[3], match[2], field, value);
+      return `${indent}- [${rebuilt.marker}] ${rebuilt.text}`;
+    });
 
-    let lineIndex = task.line - 1;
-    if (lineIndex < 0 || lineIndex >= lines.length || !CHECKBOX_REGEX.test(lines[lineIndex])) {
-      lineIndex = lines.findIndex((line) => line === task.rawLine);
-    }
-
-    if (lineIndex < 0 || lineIndex >= lines.length) {
+    if (!updated.changed) {
       return false;
     }
 
-    const currentLine = lines[lineIndex];
-    const match = currentLine.match(CHECKBOX_REGEX);
-    if (!match) {
-      return false;
-    }
-
-    const indent = match[1];
-    const marker = match[2];
-    const rebuilt = this.rebuildTaskTextWithDateUpdate(match[3], match[2], field, value);
-
-    lines[lineIndex] = `${indent}- [${rebuilt.marker}] ${rebuilt.text}`;
-    await this.app.vault.modify(file, lines.join("\n"));
+    await this.app.vault.modify(file, updated.content);
     return true;
   }
 
@@ -214,8 +195,11 @@ export class TaskParser {
 
     const nextHeadingIndex = lines.findIndex((line, index) => index > tasksHeadingIndex && /^##\s+\S/.test(line));
     const sectionEnd = nextHeadingIndex >= 0 ? nextHeadingIndex : lines.length;
+    const doneHeadingIndex = lines.findIndex((line, index) =>
+      index > tasksHeadingIndex && index < sectionEnd && DONE_HEADING_REGEX.test(line.trim())
+    );
 
-    let insertAt = sectionEnd;
+    let insertAt = doneHeadingIndex >= 0 ? doneHeadingIndex : sectionEnd;
     while (insertAt > tasksHeadingIndex + 1 && lines[insertAt - 1].trim() === "") {
       insertAt -= 1;
     }
@@ -296,6 +280,11 @@ export class TaskParser {
       changed = true;
     }
 
+    const sectionNormalized = this.normalizeTasksSectionLines(lines);
+    if (sectionNormalized.changed) {
+      changed = true;
+    }
+
     if (!changed) {
       return {
         changed: false,
@@ -305,7 +294,7 @@ export class TaskParser {
 
     return {
       changed: true,
-      content: `${frontmatter}${lines.join("\n")}`,
+      content: `${frontmatter}${sectionNormalized.lines.join("\n")}`,
     };
   }
 
@@ -533,6 +522,262 @@ export class TaskParser {
       marker,
       text: nextText,
     };
+  }
+
+  private updateTaskContent(
+    content: string,
+    task: ProjectTask,
+    update: (match: RegExpMatchArray) => string,
+  ): { changed: boolean; content: string } {
+    const { frontmatter, body, frontmatterLineCount } = splitFrontmatter(content);
+    const lines = body.split(/\r?\n/);
+    const lineIndex = this.findTaskLineIndex(lines, task, frontmatterLineCount);
+    if (lineIndex < 0 || lineIndex >= lines.length) {
+      return {
+        changed: false,
+        content,
+      };
+    }
+
+    const currentLine = lines[lineIndex];
+    const match = currentLine.match(CHECKBOX_REGEX);
+    if (!match) {
+      return {
+        changed: false,
+        content,
+      };
+    }
+
+    lines[lineIndex] = update(match);
+    const normalizedSection = this.normalizeTasksSectionLines(lines);
+    const nextContent = `${frontmatter}${normalizedSection.lines.join("\n")}`;
+    if (nextContent === content) {
+      return {
+        changed: false,
+        content,
+      };
+    }
+
+    return {
+      changed: true,
+      content: nextContent,
+    };
+  }
+
+  private findTaskLineIndex(lines: string[], task: ProjectTask, frontmatterLineCount: number): number {
+    let lineIndex = task.line - frontmatterLineCount - 1;
+    if (lineIndex < 0 || lineIndex >= lines.length || !CHECKBOX_REGEX.test(lines[lineIndex])) {
+      lineIndex = lines.findIndex((line) => line === task.rawLine);
+    }
+
+    return lineIndex;
+  }
+
+  private normalizeTasksSectionLines(lines: string[]): { changed: boolean; lines: string[] } {
+    const tasksHeadingIndex = this.findTasksHeadingIndex(lines);
+    if (tasksHeadingIndex < 0) {
+      return {
+        changed: false,
+        lines,
+      };
+    }
+
+    const sectionEnd = this.findTasksSectionEnd(lines, tasksHeadingIndex);
+    const sectionLines = lines.slice(tasksHeadingIndex + 1, sectionEnd);
+    const tasksHeading = lines[tasksHeadingIndex];
+    const doneHeadingIndex = sectionLines.findIndex((line) => DONE_HEADING_REGEX.test(line.trim()));
+    const doneHeading = doneHeadingIndex >= 0 ? sectionLines[doneHeadingIndex] : "### Done";
+    const activeLines = doneHeadingIndex >= 0 ? sectionLines.slice(0, doneHeadingIndex) : sectionLines;
+    const doneLines = doneHeadingIndex >= 0 ? sectionLines.slice(doneHeadingIndex + 1) : [];
+
+    const activeNodes = this.parseTaskSectionNodes(activeLines);
+    const doneNodes = this.parseTaskSectionNodes(doneLines);
+
+    const completedRootNodeIndexes = activeNodes
+      .map((node, index) => ({ node, index }))
+      .filter(({ node }) => node.parentIndex === null && node.state === "checked")
+      .map(({ index }) => index);
+    const reopenedNodeIndexes = doneNodes
+      .map((node, index) => ({ node, index }))
+      .filter(({ node, index }) => node.state !== "checked" && !this.hasIncompleteAncestor(doneNodes, index))
+      .map(({ index }) => index);
+
+    if (completedRootNodeIndexes.length === 0 && reopenedNodeIndexes.length === 0) {
+      return {
+        changed: false,
+        lines,
+      };
+    }
+
+    const extractedCompleted = this.extractTaskBlocks(activeLines, activeNodes, completedRootNodeIndexes);
+    const extractedReopened = this.extractTaskBlocks(doneLines, doneNodes, reopenedNodeIndexes);
+
+    const completedBlocks = extractedCompleted.movedBlocks.map((block) => this.trimOuterBlankLines(block));
+    const reopenedBlocks = extractedReopened.movedBlocks.map((block, index) =>
+      this.outdentTaskBlock(this.trimOuterBlankLines(block), doneNodes[reopenedNodeIndexes[index]].indent)
+    );
+
+    const remainingActiveLines = completedBlocks.length > 0
+      ? this.removeLeadingBlankLines(extractedCompleted.remainingLines)
+      : extractedCompleted.remainingLines;
+    const remainingDoneLines = reopenedBlocks.length > 0
+      ? this.removeLeadingBlankLines(extractedReopened.remainingLines)
+      : extractedReopened.remainingLines;
+
+    const nextActiveLines = [...this.flattenTaskBlocks(reopenedBlocks), ...remainingActiveLines];
+    const nextDoneLines = [...this.flattenTaskBlocks(completedBlocks), ...remainingDoneLines];
+    const shouldIncludeDoneHeading = doneHeadingIndex >= 0 || nextDoneLines.length > 0;
+
+    const rebuiltSectionLines = [tasksHeading];
+    if (nextActiveLines.length > 0) {
+      rebuiltSectionLines.push(...nextActiveLines);
+    } else {
+      rebuiltSectionLines.push("");
+    }
+
+    if (shouldIncludeDoneHeading) {
+      if (rebuiltSectionLines[rebuiltSectionLines.length - 1]?.trim() !== "") {
+        rebuiltSectionLines.push("");
+      }
+
+      rebuiltSectionLines.push(doneHeading);
+      if (nextDoneLines.length > 0) {
+        rebuiltSectionLines.push(...nextDoneLines);
+      }
+    }
+
+    return {
+      changed: true,
+      lines: [...lines.slice(0, tasksHeadingIndex), ...rebuiltSectionLines, ...lines.slice(sectionEnd)],
+    };
+  }
+
+  private parseTaskSectionNodes(lines: string[]): TaskSectionNode[] {
+    const nodes: TaskSectionNode[] = [];
+    const stack: number[] = [];
+
+    for (let index = 0; index < lines.length; index += 1) {
+      const match = lines[index].match(CHECKBOX_REGEX);
+      if (!match) {
+        continue;
+      }
+
+      const indent = match[1].length;
+      while (stack.length > 0 && nodes[stack[stack.length - 1]].indent >= indent) {
+        stack.pop();
+      }
+
+      const parentIndex = stack.length > 0 ? stack[stack.length - 1] : null;
+      nodes.push({
+        start: index,
+        end: lines.length,
+        indent,
+        state: this.markerToState(match[2]),
+        parentIndex,
+      });
+      stack.push(nodes.length - 1);
+    }
+
+    for (let index = 0; index < nodes.length; index += 1) {
+      const node = nodes[index];
+      const nextSiblingOrAncestor = nodes.find((candidate, candidateIndex) =>
+        candidateIndex > index && candidate.indent <= node.indent
+      );
+      node.end = nextSiblingOrAncestor?.start ?? lines.length;
+    }
+
+    return nodes;
+  }
+
+  private hasIncompleteAncestor(nodes: TaskSectionNode[], nodeIndex: number): boolean {
+    let parentIndex = nodes[nodeIndex]?.parentIndex ?? null;
+    while (parentIndex !== null) {
+      if (nodes[parentIndex].state !== "checked") {
+        return true;
+      }
+
+      parentIndex = nodes[parentIndex].parentIndex;
+    }
+
+    return false;
+  }
+
+  private extractTaskBlocks(lines: string[], nodes: TaskSectionNode[], selectedNodeIndexes: number[]): ExtractedTaskBlocks {
+    if (selectedNodeIndexes.length === 0) {
+      return {
+        remainingLines: [...lines],
+        movedBlocks: [],
+      };
+    }
+
+    const selectedNodes = selectedNodeIndexes
+      .map((index) => nodes[index])
+      .sort((left, right) => left.start - right.start);
+
+    const remainingLines: string[] = [];
+    const movedBlocks: string[][] = [];
+    let cursor = 0;
+
+    for (const node of selectedNodes) {
+      remainingLines.push(...lines.slice(cursor, node.start));
+      movedBlocks.push(lines.slice(node.start, node.end));
+      cursor = node.end;
+    }
+
+    remainingLines.push(...lines.slice(cursor));
+    return {
+      remainingLines,
+      movedBlocks,
+    };
+  }
+
+  private trimOuterBlankLines(lines: string[]): string[] {
+    let start = 0;
+    let end = lines.length;
+
+    while (start < end && lines[start].trim() === "") {
+      start += 1;
+    }
+
+    while (end > start && lines[end - 1].trim() === "") {
+      end -= 1;
+    }
+
+    return lines.slice(start, end);
+  }
+
+  private removeLeadingBlankLines(lines: string[]): string[] {
+    let start = 0;
+    while (start < lines.length && lines[start].trim() === "") {
+      start += 1;
+    }
+
+    return lines.slice(start);
+  }
+
+  private flattenTaskBlocks(blocks: string[][]): string[] {
+    return blocks.flatMap((block) => block);
+  }
+
+  private outdentTaskBlock(lines: string[], indent: number): string[] {
+    if (indent <= 0) {
+      return lines;
+    }
+
+    return lines.map((line) => {
+      if (line.trim() === "") {
+        return "";
+      }
+
+      let removeCount = indent;
+      let index = 0;
+      while (index < line.length && removeCount > 0 && /\s/u.test(line[index])) {
+        index += 1;
+        removeCount -= 1;
+      }
+
+      return line.slice(index);
+    });
   }
 
   private findTasksHeadingIndex(lines: string[]): number {
