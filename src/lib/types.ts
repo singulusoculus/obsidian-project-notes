@@ -368,4 +368,5 @@ export interface AddTaskRequest {
   scheduledDate: string;
   startDate: string | null;
   dueDate: string | null;
+  finishDate: string | null;
 }

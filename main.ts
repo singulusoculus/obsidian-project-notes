@@ -513,8 +513,9 @@ class AddTaskModal extends Modal {
   private projectPickerPointerHandler: ((event: PointerEvent) => void) | null = null;
   private taskInput: TextComponent | null = null;
   private scheduledDateInput: HTMLInputElement | null = null;
-  private startDateInput: HTMLInputElement | null = null;
   private dueDateInput: HTMLInputElement | null = null;
+  private startDateInput: HTMLInputElement | null = null;
+  private finishDateInput: HTMLInputElement | null = null;
   private submitted = false;
 
   constructor(app: App, projects: ProjectNote[], resolve: (value: AddTaskRequest | null) => void) {
@@ -619,6 +620,15 @@ class AddTaskModal extends Modal {
       },
     });
 
+    const dueWrapper = contentEl.createDiv({ cls: "opn-modal-field" });
+    dueWrapper.createEl("label", { text: "Due Date", attr: { for: "opn-task-due-date" } });
+    this.dueDateInput = dueWrapper.createEl("input", {
+      attr: {
+        id: "opn-task-due-date",
+        type: "date",
+      },
+    });
+
     const startWrapper = contentEl.createDiv({ cls: "opn-modal-field" });
     startWrapper.createEl("label", { text: "Start Date", attr: { for: "opn-task-start-date" } });
     this.startDateInput = startWrapper.createEl("input", {
@@ -628,11 +638,11 @@ class AddTaskModal extends Modal {
       },
     });
 
-    const dueWrapper = contentEl.createDiv({ cls: "opn-modal-field" });
-    dueWrapper.createEl("label", { text: "Due Date", attr: { for: "opn-task-due-date" } });
-    this.dueDateInput = dueWrapper.createEl("input", {
+    const finishWrapper = contentEl.createDiv({ cls: "opn-modal-field" });
+    finishWrapper.createEl("label", { text: "Finish Date", attr: { for: "opn-task-finish-date" } });
+    this.finishDateInput = finishWrapper.createEl("input", {
       attr: {
-        id: "opn-task-due-date",
+        id: "opn-task-finish-date",
         type: "date",
       },
     });
@@ -657,6 +667,13 @@ class AddTaskModal extends Modal {
         return;
       }
 
+      const rawDueDate = this.dueDateInput?.value.trim() ?? "";
+      const dueDate = rawDueDate.length > 0 ? rawDueDate : null;
+      if (dueDate && !isIsoDate(dueDate)) {
+        new Notice("Due date must be a valid date.");
+        return;
+      }
+
       const rawStartDate = this.startDateInput?.value.trim() ?? "";
       const startDate = rawStartDate.length > 0 ? rawStartDate : null;
       if (startDate && !isIsoDate(startDate)) {
@@ -664,10 +681,10 @@ class AddTaskModal extends Modal {
         return;
       }
 
-      const rawDueDate = this.dueDateInput?.value.trim() ?? "";
-      const dueDate = rawDueDate.length > 0 ? rawDueDate : null;
-      if (dueDate && !isIsoDate(dueDate)) {
-        new Notice("Due date must be a valid date.");
+      const rawFinishDate = this.finishDateInput?.value.trim() ?? "";
+      const finishDate = rawFinishDate.length > 0 ? rawFinishDate : null;
+      if (finishDate && !isIsoDate(finishDate)) {
+        new Notice("Finish date must be a valid date.");
         return;
       }
 
@@ -676,8 +693,9 @@ class AddTaskModal extends Modal {
         projectPath: this.selectedProjectPath,
         text,
         scheduledDate,
-        startDate,
         dueDate,
+        startDate,
+        finishDate,
       });
       this.close();
     });

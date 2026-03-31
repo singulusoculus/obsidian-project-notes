@@ -2,6 +2,7 @@ import * as chrono from "chrono-node";
 import { App, type Editor, EditorSuggest, type EditorPosition, type EditorSuggestContext, type EditorSuggestTriggerInfo, TFile } from "obsidian";
 import {
   TASK_DUE_EMOJI,
+  TASK_FINISHED_EMOJI,
   TASK_PRIORITY_METADATA,
   TASK_PRIORITY_ORDER,
   TASK_SCHEDULED_EMOJI,
@@ -43,9 +44,10 @@ const DATE_SUGGESTION_LABELS = [
 ];
 
 const DATE_FIELD_LABELS: Array<{ field: TaskDateField; emoji: string; label: string }> = [
+  { field: "scheduled", emoji: TASK_SCHEDULED_EMOJI, label: "scheduled date" },
   { field: "due", emoji: TASK_DUE_EMOJI, label: "due date" },
   { field: "start", emoji: TASK_START_EMOJI, label: "start date" },
-  { field: "scheduled", emoji: TASK_SCHEDULED_EMOJI, label: "scheduled date" },
+  { field: "finish", emoji: TASK_FINISHED_EMOJI, label: "finish date" },
 ];
 
 export class TaskEditorSuggest extends EditorSuggest<SuggestionEntry> {
@@ -154,13 +156,16 @@ export class TaskEditorSuggest extends EditorSuggest<SuggestionEntry> {
 
     const suggestions: SuggestionEntry[] = [];
     for (const field of DATE_FIELD_LABELS) {
+      if (field.field === "scheduled" && taskContext.scheduledDate) {
+        continue;
+      }
       if (field.field === "due" && taskContext.dueDate) {
         continue;
       }
       if (field.field === "start" && taskContext.startDate) {
         continue;
       }
-      if (field.field === "scheduled" && taskContext.scheduledDate) {
+      if (field.field === "finish" && taskContext.finishedDate) {
         continue;
       }
 
@@ -242,7 +247,7 @@ export class TaskEditorSuggest extends EditorSuggest<SuggestionEntry> {
   }
 
   private findActiveDateContext(prefix: string): ActiveDateContext | null {
-    const match = /([⏳🛫📅])\s*([^⏳🛫📅✅🔵🟢🔴🔥]*)$/u.exec(prefix);
+    const match = /([⏳🛫📅✅])\s*([^⏳🛫📅✅🔵🟢🔴🔥]*)$/u.exec(prefix);
     if (!match) {
       return null;
     }
@@ -268,6 +273,10 @@ export class TaskEditorSuggest extends EditorSuggest<SuggestionEntry> {
   }
 
   private fieldForEmoji(emoji: string): TaskDateField | null {
+    if (emoji === TASK_SCHEDULED_EMOJI) {
+      return "scheduled";
+    }
+
     if (emoji === TASK_DUE_EMOJI) {
       return "due";
     }
@@ -276,8 +285,8 @@ export class TaskEditorSuggest extends EditorSuggest<SuggestionEntry> {
       return "start";
     }
 
-    if (emoji === TASK_SCHEDULED_EMOJI) {
-      return "scheduled";
+    if (emoji === TASK_FINISHED_EMOJI) {
+      return "finish";
     }
 
     return null;

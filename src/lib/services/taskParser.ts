@@ -171,11 +171,15 @@ export class TaskParser {
       return false;
     }
 
+    if (request.dueDate && !isIsoDate(request.dueDate)) {
+      return false;
+    }
+
     if (request.startDate && !isIsoDate(request.startDate)) {
       return false;
     }
 
-    if (request.dueDate && !isIsoDate(request.dueDate)) {
+    if (request.finishDate && !isIsoDate(request.finishDate)) {
       return false;
     }
 
@@ -204,13 +208,16 @@ export class TaskParser {
       insertAt -= 1;
     }
 
+    const marker = request.finishDate ? "x" : " ";
     const scheduledPart = ` ${TASK_SCHEDULED_EMOJI} ${request.scheduledDate}`;
     const startPart = request.startDate ? ` ${TASK_START_EMOJI} ${request.startDate}` : "";
     const duePart = request.dueDate ? ` ${TASK_DUE_EMOJI} ${request.dueDate}` : "";
-    const taskLine = `- [ ] ${text}${scheduledPart}${startPart}${duePart}`;
+    const finishPart = request.finishDate ? ` ${TASK_FINISHED_EMOJI} ${request.finishDate}` : "";
+    const taskLine = `- [${marker}] ${text}${scheduledPart}${startPart}${duePart}${finishPart}`;
     lines.splice(insertAt, 0, taskLine);
 
-    await this.app.vault.modify(file, `${frontmatter}${lines.join("\n")}`);
+    const normalizedSection = this.normalizeTasksSectionLines(lines);
+    await this.app.vault.modify(file, `${frontmatter}${normalizedSection.lines.join("\n")}`);
     return true;
   }
 
